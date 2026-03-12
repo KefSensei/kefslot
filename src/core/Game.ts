@@ -15,6 +15,7 @@ import { LevelComplete } from '@/ui/LevelComplete';
 import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
+import { Howler } from 'howler';
 import gsap from 'gsap';
 
 export class Game {
@@ -209,6 +210,14 @@ export class Game {
 
     // HUD
     this.hud = new HUD();
+    this.hud.setMusicMuted(this.player.musicMuted);
+    if (this.player.musicMuted) {
+      Howler.mute(true);
+    }
+    this.hud.onMusicToggle = (muted) => {
+      this.player.setMusicMuted(muted);
+      Howler.mute(muted);
+    };
     this.gameScene.addChild(this.hud);
 
     // Slot Grid
