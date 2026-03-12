@@ -60,6 +60,10 @@ export class SlotGrid extends Container {
   private shimmerGraphic: Graphics | null = null;
   private shimmerTween: gsap.core.Tween | null = null;
 
+  // Hint overlay
+  private hintGraphics: Graphics[] = [];
+  private hintTweens: gsap.core.Tween[] = [];
+
   // Drag state
   private dragStart: { row: number; col: number; px: number; py: number } | null = null;
   private isDragging = false;
@@ -335,56 +339,59 @@ export class SlotGrid extends Container {
     await tl.then();
   }
 
-  // Animate the spin: symbols roll upward and fade
-  async animateSpin(): Promise<void> {
-    const allSprites = this.cells.flat().filter(Boolean) as CellSprite[];
-    if (allSprites.length === 0) return;
+  /**
+   * Slot-style reel spin: current symbols scroll downward off-screen per column,
+   * then new grid is rendered and new symbols scroll down from above with bounce.
+   * Each column stops at a different time (left first, right last).
+   */
+  async animateReelSpin(generateNewGrid: () => void): Promise<void> {
+    const rows = GameConfig.rows;
+    const cols = GameConfig.cols;
+    const totalH = rows * (CELL + GAP) - GAP;
 
-    const tl = gsap.timeline();
-    for (let c = 0; c < GameConfig.cols; c++) {
-      for (let r = 0; r < GameConfig.rows; r++) {
+    // Phase 1: Scroll current symbols downward off-screen
+    const scrollOut = gsap.timeline();
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows; r++) {
         const sprite = this.cells[r]?.[c];
         if (sprite) {
-          tl.to(sprite, {
-            y: sprite.y - 300,
+          scrollOut.to(sprite, {
+            y: sprite.y + 500 + r * 40,
             alpha: 0,
             duration: 0.35,
             ease: 'power2.in',
-          }, c * 0.08 + r * 0.02);
+          }, c * 0.1 + r * 0.02);
         }
       }
     }
-    await tl.then();
-  }
+    await scrollOut.then();
 
-  // Slot-style reel drop animation: symbols fall from above per column
-  async animateLand(): Promise<void> {
-    this.renderGrid();
-    const rows = GameConfig.rows;
-    const cols = GameConfig.cols;
+    // Phase 2: Generate new grid data and render
+    generateNewGrid();
 
-    const tl = gsap.timeline();
-
+    // Phase 3: New symbols enter from above and scroll into place
+    const scrollIn = gsap.timeline();
     for (let c = 0; c < cols; c++) {
       for (let r = 0; r < rows; r++) {
         const sprite = this.cells[r]?.[c];
         if (sprite) {
           const targetY = sprite.y;
-          sprite.y = targetY - 600 - r * 60;
+          // Start above the grid, staggered per column
+          sprite.y = targetY - 600 - r * 50;
           sprite.alpha = 1;
 
-          const colDelay = c * 0.15;
+          const colDelay = c * 0.2;
           const rowDelay = r * 0.04;
 
-          tl.to(sprite, {
+          scrollIn.to(sprite, {
             y: targetY,
-            duration: 0.45,
+            duration: 0.5,
             ease: 'bounce.out',
           }, colDelay + rowDelay);
         }
       }
     }
-    await tl.then();
+    await scrollIn.then();
   }
 
   // Animate gravity drop for cells that moved down
@@ -466,6 +473,42 @@ export class SlotGrid extends Container {
     const sprite = this.cells[row]?.[col];
     if (sprite) return { x: sprite.x + CELL / 2, y: sprite.y + CELL / 2 };
     return null;
+  }
+
+  // --- Hint system ---
+
+  /** Show a subtle bounce on two cells to hint a valid swap */
+  showHint(r1: number, c1: number, r2: number, c2: number): void {
+    this.clearHint();
+    for (const [r, c] of [[r1, c1], [r2, c2]]) {
+      const sprite = this.cells[r]?.[c];
+      if (!sprite) continue;
+
+      // Gentle repeating bounce on the actual cell sprite
+      const tween = gsap.to(sprite.scale, {
+        x: 1.1, y: 1.1,
+        duration: 0.5,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inOut',
+      });
+      this.hintTweens.push(tween);
+    }
+  }
+
+  /** Remove hint animations and reset cell scales */
+  clearHint(): void {
+    for (const tween of this.hintTweens) tween.kill();
+    // Reset any hinted cell scales back to 1
+    for (const row of this.cells) {
+      for (const sprite of row) {
+        if (sprite) {
+          gsap.set(sprite.scale, { x: 1, y: 1 });
+        }
+      }
+    }
+    this.hintTweens = [];
+    this.hintGraphics = [];
   }
 
   // --- Drag-to-swap ---
@@ -582,8 +625,28 @@ class CellSprite extends Container {
     this.drawShapePath(g, shape, cx, cy, r);
     g.stroke({ color: lightColor, width: 2, alpha: 0.4 });
 
-    // 4. Inner shine (small white ellipse, upper-left)
-    g.ellipse(cx - r * 0.25, cy - r * 0.3, r * 0.35, r * 0.2);
+    // 4. Inner shine (adjusted per shape to stay within bounds)
+    let shineX = cx - r * 0.15;
+    let shineY = cy - r * 0.2;
+    let shineRx = r * 0.25;
+    let shineRy = r * 0.15;
+    if (shape === 'triangle') {
+      shineX = cx;
+      shineY = cy - r * 0.05;
+      shineRx = r * 0.2;
+      shineRy = r * 0.12;
+    } else if (shape === 'diamond') {
+      shineX = cx;
+      shineY = cy - r * 0.15;
+      shineRx = r * 0.2;
+      shineRy = r * 0.12;
+    } else if (shape === 'star') {
+      shineX = cx - r * 0.1;
+      shineY = cy - r * 0.15;
+      shineRx = r * 0.18;
+      shineRy = r * 0.1;
+    }
+    g.ellipse(shineX, shineY, shineRx, shineRy);
     g.fill({ color: 0xffffff, alpha: 0.3 });
   }
 

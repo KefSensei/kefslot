@@ -159,6 +159,23 @@ export class Match3Engine {
     return { cleared, score: cleared.length * GameConfig.baseSymbolScore * 3 };
   }
 
+  /** Find a valid swap hint — returns the first valid adjacent pair or null */
+  findHint(): { r1: number; c1: number; r2: number; c2: number } | null {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        // Check right neighbor
+        if (c + 1 < this.cols && this.isValidSwap(r, c, r, c + 1)) {
+          return { r1: r, c1: c, r2: r, c2: c + 1 };
+        }
+        // Check down neighbor
+        if (r + 1 < this.rows && this.isValidSwap(r, c, r + 1, c)) {
+          return { r1: r, c1: c, r2: r + 1, c2: c };
+        }
+      }
+    }
+    return null;
+  }
+
   private determinePowerUp(match: MatchGroup): { row: number; col: number; type: PowerUpType } | null {
     if (match.cells.length >= 5) {
       const mid = match.cells[Math.floor(match.cells.length / 2)];
