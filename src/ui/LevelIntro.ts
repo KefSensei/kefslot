@@ -6,9 +6,22 @@ import gsap from 'gsap';
 export class LevelIntro extends Container {
   private panel = new Container();
 
+  private overlay: Graphics | null = null;
+
   constructor() {
     super();
     this.visible = false;
+  }
+
+  /** Reposition overlay and panel for new active canvas dimensions */
+  relayout(w: number, h: number): void {
+    if (this.overlay) {
+      this.overlay.clear();
+      this.overlay.rect(0, 0, w, h);
+      this.overlay.fill({ color: 0x000000, alpha: 0.7 });
+    }
+    this.panel.x = w / 2;
+    this.panel.y = h / 2;
   }
 
   /** Show the intro overlay. Returns a promise that resolves when the player clicks "Let's Go!" */
@@ -18,16 +31,16 @@ export class LevelIntro extends Container {
       this.visible = true;
 
       // Overlay backdrop
-      const overlay = new Graphics();
-      overlay.rect(0, 0, GameConfig.width, GameConfig.height);
-      overlay.fill({ color: 0x000000, alpha: 0.7 });
-      overlay.eventMode = 'static'; // block clicks behind
-      this.addChild(overlay);
+      this.overlay = new Graphics();
+      this.overlay.rect(0, 0, GameConfig.activeWidth, GameConfig.activeHeight);
+      this.overlay.fill({ color: 0x000000, alpha: 0.7 });
+      this.overlay.eventMode = 'static'; // block clicks behind
+      this.addChild(this.overlay);
 
       // Panel
       this.panel = new Container();
-      this.panel.x = GameConfig.width / 2;
-      this.panel.y = GameConfig.height / 2;
+      this.panel.x = GameConfig.activeWidth / 2;
+      this.panel.y = GameConfig.activeHeight / 2;
       this.addChild(this.panel);
 
       const panelBg = new Graphics();
@@ -94,7 +107,7 @@ export class LevelIntro extends Container {
         // Animate out
         const tl = gsap.timeline();
         tl.to(this.panel.scale, { x: 0, y: 0, duration: 0.25, ease: 'back.in' }, 0);
-        tl.to(overlay, { alpha: 0, duration: 0.25 }, 0);
+        tl.to(this.overlay!, { alpha: 0, duration: 0.25 }, 0);
         tl.then().then(() => {
           this.visible = false;
           resolve();

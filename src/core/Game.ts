@@ -45,6 +45,13 @@ export class Game {
   private levelIntro!: LevelIntro;
   private goalDisplay!: Container;
 
+  // Layout references for relayout
+  private gameBg!: Graphics;
+  private gameTopGrad!: Graphics;
+  private gameAmbientGlow!: Graphics;
+  private gameHeader!: Text;
+  private _isPortrait: boolean | null = null; // null = not yet laid out
+
   // Game state
   private currentLevelDef: LevelDef | null = null;
   private spinsRemaining = 0;
@@ -182,28 +189,28 @@ export class Game {
 
   private buildGameScene(): void {
     // Gradient background (dark purple → near-black)
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x0d0520 });
-    this.gameScene.addChild(bg);
+    this.gameBg = new Graphics();
+    this.gameBg.rect(0, 0, GameConfig.width, GameConfig.height);
+    this.gameBg.fill({ color: 0x0d0520 });
+    this.gameScene.addChild(this.gameBg);
 
     // Upper gradient overlay (lighter purple fade)
-    const topGrad = new Graphics();
-    topGrad.rect(0, 0, GameConfig.width, 200);
-    topGrad.fill({ color: 0x2a1050, alpha: 0.4 });
-    this.gameScene.addChild(topGrad);
+    this.gameTopGrad = new Graphics();
+    this.gameTopGrad.rect(0, 0, GameConfig.width, 200);
+    this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
+    this.gameScene.addChild(this.gameTopGrad);
 
     // Ambient glow behind slot machine
-    const ambientGlow = new Graphics();
-    ambientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
-    ambientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
-    this.gameScene.addChild(ambientGlow);
+    this.gameAmbientGlow = new Graphics();
+    this.gameAmbientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
+    this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
+    this.gameScene.addChild(this.gameAmbientGlow);
 
     // Starfield
     this.addStarfield(this.gameScene);
 
     // Header plate: "ROXY'S MAGIC REELS"
-    const header = new Text({
+    this.gameHeader = new Text({
       text: "ROXY'S MAGIC REELS",
       style: new TextStyle({
         fontSize: 20,
@@ -214,10 +221,10 @@ export class Game {
         dropShadow: { color: 0x000000, distance: 2, alpha: 0.5 },
       }),
     });
-    header.anchor.set(0.5);
-    header.x = GameConfig.width / 2;
-    header.y = 78;
-    this.gameScene.addChild(header);
+    this.gameHeader.anchor.set(0.5);
+    this.gameHeader.x = GameConfig.width / 2;
+    this.gameHeader.y = 78;
+    this.gameScene.addChild(this.gameHeader);
 
     // HUD
     this.hud = new HUD();
@@ -262,6 +269,60 @@ export class Game {
 
     this.gameScene.visible = false;
     this.app.stage.addChild(this.gameScene);
+  }
+
+  /** Reposition all game elements for portrait or landscape layout */
+  relayout(isPortrait: boolean): void {
+    if (this._isPortrait === isPortrait) return;
+    this._isPortrait = isPortrait;
+
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+
+    // Redraw backgrounds to fit active canvas
+    this.gameBg.clear();
+    this.gameBg.rect(0, 0, w, h);
+    this.gameBg.fill({ color: 0x0d0520 });
+
+    this.gameTopGrad.clear();
+    this.gameTopGrad.rect(0, 0, w, 200);
+    this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
+
+    this.gameAmbientGlow.clear();
+    this.gameAmbientGlow.circle(w / 2, h / 2 - 20, 280);
+    this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
+
+    // Header
+    if (isPortrait) {
+      this.gameHeader.visible = false; // hide in portrait to save space
+    } else {
+      this.gameHeader.visible = true;
+      this.gameHeader.x = w / 2;
+      this.gameHeader.y = 78;
+    }
+
+    // Grid — center in the available space
+    this.slotGrid.x = w / 2;
+    this.slotGrid.y = isPortrait ? h / 2 - 60 : h / 2 - 20;
+
+    // Spin button
+    this.spinButton.x = w / 2;
+    this.spinButton.y = isPortrait ? h - 55 : h - 45;
+    this.spinButton.setPortrait(isPortrait);
+
+    // Goal display
+    this.goalDisplay.x = w / 2;
+    this.goalDisplay.y = isPortrait ? h - 110 : h - 90;
+
+    // HUD
+    this.hud.setPortrait(isPortrait);
+
+    // Overlays — reposition panel centers
+    this.levelIntro.relayout(w, h);
+    this.levelComplete.relayout(w, h);
+
+    // Level select uses activeWidth/activeHeight in build(), so refresh it
+    this.levelSelectScene?.refresh();
   }
 
   /** Add floating starfield particles to a scene */

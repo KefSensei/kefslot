@@ -111,9 +111,39 @@ export class SpinButton extends Container {
     gsap.to(this.glowRing, { alpha: 0.7, duration: 0.3, yoyo: true, repeat: 2, ease: 'sine.inOut' });
   }
 
+  /** Resize button for portrait (wider, taller) or landscape (standard) */
+  setPortrait(isPortrait: boolean): void {
+    const hw = isPortrait ? 110 : 80;
+    const hh = isPortrait ? 32 : 28;
+    const r = isPortrait ? 32 : 28;
+
+    this.shadow.clear();
+    this.shadow.roundRect(-hw, -hh + 3, hw * 2, hh * 2, r);
+    this.shadow.fill({ color: 0x000000, alpha: 0.35 });
+
+    this.glowRing.clear();
+    this.glowRing.roundRect(-hw - 8, -hh - 5, (hw + 8) * 2, (hh + 5) * 2, r + 5);
+    this.glowRing.fill({ color: 0xF5D060, alpha: 0.25 });
+
+    this.gloss.clear();
+    this.gloss.roundRect(-hw + 4, -hh + 2, (hw - 4) * 2, hh, r / 2);
+    this.gloss.fill({ color: 0xffffff, alpha: 0.12 });
+
+    this.hitArea = new Rectangle(-hw, -hh, hw * 2, hh * 2);
+    this.drawButton(this._enabled ? 0x9b59b6 : 0x555555);
+  }
+
+  private _btnHW = 80;
+  private _btnHH = 28;
+  private _btnR = 28;
+
   private drawButton(color: number): void {
+    const hw = (this.hitArea as Rectangle)?.width ? (this.hitArea as Rectangle).width / 2 : 80;
+    const hh = (this.hitArea as Rectangle)?.height ? (this.hitArea as Rectangle).height / 2 : 28;
+    const r = hh;
+
     this.bg.clear();
-    this.bg.roundRect(-80, -28, 160, 56, 28);
+    this.bg.roundRect(-hw, -hh, hw * 2, hh * 2, r);
     this.bg.fill({ color });
     this.bg.stroke({ color: 0xF5D060, width: 3 });
   }

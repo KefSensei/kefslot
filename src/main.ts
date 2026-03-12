@@ -40,26 +40,51 @@ async function boot() {
   // Add canvas to DOM
   document.body.appendChild(app.canvas);
 
-  // Scale stage to fit window while maintaining aspect ratio
+  // Detect touch device once
+  GameConfig.isTouch = 'ontouchstart' in window;
+
+  let game: Game | null = null;
+
+  // Scale stage to fit window, with portrait/landscape detection
   const resize = () => {
     const windowW = window.innerWidth;
     const windowH = window.innerHeight;
-    const scale = Math.min(windowW / GameConfig.width, windowH / GameConfig.height);
+    const isPortrait = windowH > windowW * 1.2;
+
+    // Update active dimensions
+    GameConfig.isPortrait = isPortrait;
+    if (isPortrait) {
+      GameConfig.activeWidth = GameConfig.portraitWidth;
+      GameConfig.activeHeight = GameConfig.portraitHeight;
+    } else {
+      GameConfig.activeWidth = GameConfig.width;
+      GameConfig.activeHeight = GameConfig.height;
+    }
+
+    const activeW = GameConfig.activeWidth;
+    const activeH = GameConfig.activeHeight;
+    const scale = Math.min(windowW / activeW, windowH / activeH);
+
     app.stage.scale.set(scale);
-    app.stage.x = (windowW - GameConfig.width * scale) / 2;
-    app.stage.y = (windowH - GameConfig.height * scale) / 2;
+    app.stage.x = (windowW - activeW * scale) / 2;
+    app.stage.y = (windowH - activeH * scale) / 2;
+
+    // Notify game of layout change
+    game?.relayout(isPortrait);
   };
 
   window.__kefslot_resize = resize;
   window.addEventListener('resize', resize);
-  resize();
 
   // Ensure interactivity on stage
   app.stage.eventMode = 'static';
   app.stage.hitArea = app.screen;
 
   // Start game
-  new Game(app);
+  game = new Game(app);
+
+  // Initial resize after game is constructed
+  resize();
 }
 
 boot().catch(console.error);

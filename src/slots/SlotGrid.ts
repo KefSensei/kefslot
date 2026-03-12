@@ -565,7 +565,8 @@ export class SlotGrid extends Container {
     const local = e.getLocalPosition(this);
     const dx = local.x - this.dragStart.px;
     const dy = local.y - this.dragStart.py;
-    const threshold = CELL * 0.4;
+    // Lower threshold on touch devices for easier finger swiping
+    const threshold = GameConfig.isTouch ? CELL * 0.25 : CELL * 0.4;
 
     if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
       let dr = 0, dc = 0;
@@ -599,7 +600,8 @@ export class SlotGrid extends Container {
         const local = e.getLocalPosition(this);
         const dx = local.x - this.dragStart.px;
         const dy = local.y - this.dragStart.py;
-        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+        const tapRadius = GameConfig.isTouch ? 15 : 5;
+        if (Math.abs(dx) < tapRadius && Math.abs(dy) < tapRadius) {
           const cellData = this.gridData[row]?.[col];
           if (cellData?.powerUp) {
             this.dragStart = null;

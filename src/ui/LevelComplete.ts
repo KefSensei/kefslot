@@ -4,10 +4,25 @@ import gsap from 'gsap';
 
 export class LevelComplete extends Container {
   onContinue: (() => void) | null = null;
+  private overlay: Graphics | null = null;
+  private panel: Container | null = null;
 
   constructor() {
     super();
     this.visible = false;
+  }
+
+  /** Reposition overlay and panel for new active canvas dimensions */
+  relayout(w: number, h: number): void {
+    if (this.overlay) {
+      this.overlay.clear();
+      this.overlay.rect(0, 0, w, h);
+      this.overlay.fill({ color: 0x000000, alpha: 0.7 });
+    }
+    if (this.panel) {
+      this.panel.x = w / 2;
+      this.panel.y = h / 2;
+    }
   }
 
   show(data: { levelId: number; score: number; stars: number; coinsEarned: number; passed: boolean }): void {
@@ -15,16 +30,17 @@ export class LevelComplete extends Container {
     this.visible = true;
 
     // Overlay
-    const overlay = new Graphics();
-    overlay.rect(0, 0, GameConfig.width, GameConfig.height);
-    overlay.fill({ color: 0x000000, alpha: 0.7 });
-    overlay.eventMode = 'static'; // block clicks behind
-    this.addChild(overlay);
+    this.overlay = new Graphics();
+    this.overlay.rect(0, 0, GameConfig.activeWidth, GameConfig.activeHeight);
+    this.overlay.fill({ color: 0x000000, alpha: 0.7 });
+    this.overlay.eventMode = 'static'; // block clicks behind
+    this.addChild(this.overlay);
 
     // Panel
     const panel = new Container();
-    panel.x = GameConfig.width / 2;
-    panel.y = GameConfig.height / 2;
+    this.panel = panel;
+    panel.x = GameConfig.activeWidth / 2;
+    panel.y = GameConfig.activeHeight / 2;
     this.addChild(panel);
 
     const panelBg = new Graphics();

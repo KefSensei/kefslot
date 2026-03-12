@@ -19,7 +19,7 @@ export class LevelSelect extends Container {
   private build(): void {
     // Background
     const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
+    bg.rect(0, 0, GameConfig.activeWidth, GameConfig.activeHeight);
     bg.fill({ color: 0x1a0a2e });
     this.addChild(bg);
 
@@ -35,7 +35,7 @@ export class LevelSelect extends Container {
       }),
     });
     title.anchor.set(0.5, 0);
-    title.x = GameConfig.width / 2;
+    title.x = GameConfig.activeWidth / 2;
     title.y = 16;
     this.addChild(title);
 
@@ -51,7 +51,7 @@ export class LevelSelect extends Container {
     const btnSize = 72;
     const gap = 14;
     const gridWidth = cols * (btnSize + gap) - gap;
-    const startX = (GameConfig.width - gridWidth) / 2;
+    const startX = (GameConfig.activeWidth - gridWidth) / 2;
     let cursorY = 62; // vertical cursor for layout
 
     for (const [worldId, levels] of worlds) {
