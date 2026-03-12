@@ -164,7 +164,7 @@ export class HUD extends Container {
     })});
     this.messageText.anchor.set(0.5);
     this.messageText.x = GameConfig.width / 2;
-    this.messageText.y = 80;
+    this.messageText.y = 100;
     this.messageText.visible = false;
     this.addChild(this.messageText);
   }
