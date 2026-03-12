@@ -317,10 +317,12 @@ export class Game {
         break;
       case 'MATCH3_PHASE':
         this.slotGrid.setInteractive(true);
-        this.spinButton.setEnabled(false);
+        this.spinButton.setEnabled(this.spinsRemaining > 0);
         this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
         this.hud.showMessage('Drag to swap symbols!', 2000);
         this.startHintTimer();
+        // Check for dead board (no valid swaps)
+        this.checkForDeadBoard();
         break;
     }
   }
@@ -362,7 +364,15 @@ export class Game {
   }
 
   private async handleSpin(): Promise<void> {
-    if (this.fsm.state !== 'IDLE' || this.spinsRemaining <= 0) return;
+    if (this.spinsRemaining <= 0) return;
+    if (this.fsm.state !== 'IDLE' && this.fsm.state !== 'MATCH3_PHASE') return;
+
+    // If re-spinning from MATCH3_PHASE, clean up match phase state
+    if (this.fsm.state === 'MATCH3_PHASE') {
+      this.clearHintTimer();
+      this.slotGrid.clearHint();
+      this.slotGrid.setInteractive(false);
+    }
 
     this.spinsRemaining--;
     this.movesRemaining = this.currentLevelDef!.movesPerSpin;
@@ -564,10 +574,41 @@ export class Game {
     this.slotGrid.setInteractive(true);
     this.startHintTimer();
 
+    // Update spin button to reflect remaining moves
+    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
       await delay(500);
       this.endMatchPhase();
+    } else {
+      // Check for dead board after swap resolves
+      this.checkForDeadBoard();
+    }
+  }
+
+  private checkForDeadBoard(): void {
+    if (this.fsm.state !== 'MATCH3_PHASE') return;
+    const hint = this.match3.findHint();
+    if (hint) return; // Valid moves exist, all good
+
+    // No valid swaps on the board
+    this.slotGrid.setInteractive(false);
+    this.clearHintTimer();
+    this.slotGrid.clearHint();
+
+    if (this.spinsRemaining > 0) {
+      // Player can re-spin to get a new board
+      this.hud.showMessage('No moves available! Press SPIN', 3000);
+      this.sfx.play('invalidSwap');
+      this.spinButton.setEnabled(true);
+      this.spinButton.setText('SPIN');
+      this.spinButton.playAttention();
+    } else {
+      // No spins and no moves — end the match phase
+      this.hud.showMessage('No moves left!', 1500);
+      this.sfx.play('invalidSwap');
+      setTimeout(() => this.endMatchPhase(), 1500);
     }
   }
 

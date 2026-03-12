@@ -14,7 +14,7 @@ const validTransitions: Record<GameState, GameState[]> = {
   IDLE:            ['SPINNING', 'LEVEL_SELECT'],
   SPINNING:        ['CASCADE_RESOLVE'],
   CASCADE_RESOLVE: ['MATCH3_PHASE'],
-  MATCH3_PHASE:    ['SCORING'],
+  MATCH3_PHASE:    ['SCORING', 'SPINNING'],
   SCORING:         ['LEVEL_CHECK'],
   LEVEL_CHECK:     ['IDLE', 'LEVEL_SELECT'],
 };

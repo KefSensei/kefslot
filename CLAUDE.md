@@ -9,7 +9,7 @@ A hybrid **Slot + Match-3** browser game built with PixiJS 8, TypeScript, GSAP, 
 - **Renderer:** PixiJS 8.x (WebGL)
 - **Language:** TypeScript (strict mode)
 - **Animations:** GSAP 3.x
-- **Audio:** Howler.js (imported, not yet wired up)
+- **Audio:** Howler.js (music stems) + Web Audio API (procedural SFX via SFXManager)
 - **Build:** Vite 8.x with `@` path alias → `src/`
 - **Dev server:** `node node_modules/.bin/vite --port 3005` (configured in `.claude/launch.json`)
 
@@ -32,14 +32,17 @@ src/
 │   ├── GameConfig.ts       # Constants: 800x700 canvas, 5x5 grid, 80px cells, scoring
 │   ├── SymbolConfig.ts     # 12 symbols (ruby, emerald, sapphire, amethyst, topaz, potion, roxy/wild, scatter, multiplier, crystal, mushroom, bat)
 │   └── LevelConfig.ts      # 20 levels across 2 worlds with goals & star thresholds
+├── audio/
+│   ├── MusicManager.ts     # Howler.js music with 10-stem progressive layering
+│   └── SFXManager.ts       # Web Audio API procedural SFX (18 sounds, lazy AudioContext)
 ├── core/
-│   ├── Game.ts             # Main controller (~560 lines). Manages scenes, state, spin/swap flow
-│   ├── StateMachine.ts     # FSM: MENU→LEVEL_SELECT→IDLE→SPINNING→CASCADE_RESOLVE→MATCH3_PHASE→SCORING→LEVEL_CHECK
+│   ├── Game.ts             # Main controller (~780 lines). Manages scenes, state, spin/swap flow
+│   ├── StateMachine.ts     # FSM: MENU→LEVEL_SELECT→IDLE→SPINNING→CASCADE_RESOLVE→MATCH3_PHASE(→SPINNING)→SCORING→LEVEL_CHECK
 │   └── EventBus.ts         # Pub/sub (swap, matchCleared, gravityApplied, gridFilled)
 ├── models/
 │   ├── Symbol.ts           # CellData, PowerUpType (blast/bomb/rainbow)
 │   ├── Level.ts            # LevelDef, LevelGoal interfaces
-│   └── PlayerState.ts      # Coins, progress, localStorage persistence
+│   └── PlayerState.ts      # Coins, progress, musicMuted, localStorage persistence
 ├── slots/
 │   ├── SlotGrid.ts         # 5x5 visual grid, drag-to-swap, all animations
 │   └── CascadeEngine.ts    # Match detection (3+ horizontal/vertical), multipliers [1,2,3,5,8,13,21]
@@ -48,7 +51,7 @@ src/
 ├── effects/
 │   └── MatchEffects.ts     # Confetti particles, floating "+score" text, cascade burst
 ├── ui/
-│   ├── HUD.ts              # Top bar: level, score, moves, multiplier, coins
+│   ├── HUD.ts              # Top bar: level, score, moves, multiplier, coins, music mute toggle
 │   ├── SpinButton.ts       # SPIN / MOVES:N / DONE button
 │   ├── LevelSelect.ts      # 5-column level grid with world headers
 │   └── LevelComplete.ts    # Win/lose overlay with stars
@@ -64,6 +67,8 @@ SPIN → symbols fall (slot-style reel drop per column)
   → MATCH3_PHASE: player drag-swaps adjacent symbols for N moves
     → Valid swaps: animate swap → clear matches → gravity → fill → cascade
     → Invalid swaps: bounce-back animation
+    → Spin button remains available as escape hatch (MATCH3_PHASE → SPINNING)
+    → Dead board detection: if no valid swaps, prompts "No moves! Press SPIN"
   → When moves depleted → SCORING → LEVEL_CHECK
   → Meet level goals → advance (stars + coins), else retry or use more spins
 ```
@@ -124,9 +129,14 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 - Star rating (1-3 stars)
 - Player progress persistence (localStorage)
 - 20 levels designed and configured
+- Music system (Howler.js, 10-stem progressive layering) with mute toggle
+- SFX system (Web Audio API, 18 procedural sounds) — matches, swaps, spins, UI feedback
+- Level select grouped by world with styled headers
+- Spin button available during MATCH3_PHASE (re-spin escape hatch)
+- Dead board detection — auto-prompts player when no valid swaps remain
 
 ### Not Yet Implemented
-- Audio (Howler.js imported but not wired)
+- SFX mute button (separate from music mute)
 - Blocker tiles (ice/stone) — config exists, logic TODO
 - Power-up activation animations (logic works, visuals minimal)
 - Roxy character reactions during gameplay
@@ -135,6 +145,7 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 - Mobile touch optimization
 - Tutorial/guided prompts for levels 1-3
 - Final art (currently placeholder geometric shapes)
+- Symbol clipping to slot frame (symbols visible outside frame during animations)
 
 ## Scoring Reference
 
