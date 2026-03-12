@@ -10,13 +10,13 @@ export type GameState =
 
 const validTransitions: Record<GameState, GameState[]> = {
   MENU:            ['LEVEL_SELECT'],
-  LEVEL_SELECT:    ['IDLE', 'MENU'],
+  LEVEL_SELECT:    ['IDLE', 'MENU', 'SPINNING'],
   IDLE:            ['SPINNING', 'LEVEL_SELECT'],
   SPINNING:        ['CASCADE_RESOLVE'],
   CASCADE_RESOLVE: ['MATCH3_PHASE'],
   MATCH3_PHASE:    ['SCORING', 'SPINNING'],
   SCORING:         ['LEVEL_CHECK'],
-  LEVEL_CHECK:     ['IDLE', 'LEVEL_SELECT'],
+  LEVEL_CHECK:     ['IDLE', 'LEVEL_SELECT', 'SPINNING'],
 };
 
 type StateChangeCallback = (from: GameState, to: GameState) => void;

@@ -454,16 +454,9 @@ export class Game {
     // Start music (lead vocals only, stems layer in as score grows)
     this.music.start();
 
-    // Generate initial grid
+    // Generate a placeholder grid (will be replaced by auto-spin)
     this.match3.setLevel(levelId);
     const gridData = this.slotGrid.generateGrid(levelId);
-
-    // Place blockers if configured
-    if (def.hasBlockers) {
-      this.placeBlockers(gridData, def);
-      this.slotGrid.renderGrid();
-    }
-
     this.match3.setGrid(gridData);
 
     // Show game scene before intro so it's visible behind the overlay
@@ -475,12 +468,51 @@ export class Game {
       await this.levelIntro.show(def.intro);
     }
 
-    // Transition to game
-    if (this.fsm.state === 'LEVEL_SELECT') {
-      this.fsm.transition('IDLE');
-    } else if (this.fsm.state === 'LEVEL_CHECK') {
-      this.fsm.transition('IDLE');
+    // Auto-spin the first reel immediately — player gets right into the action
+    this.autoSpin();
+  }
+
+  /** Perform an automatic spin (used for first spin on level start) */
+  private async autoSpin(): Promise<void> {
+    if (this.spinsRemaining <= 0) return;
+
+    this.spinsRemaining--;
+    this.movesRemaining = this.currentLevelDef!.movesPerSpin;
+    this.hud.setMoves(this.movesRemaining);
+
+    this.fsm.transition('SPINNING');
+    this.spinButton.setEnabled(false);
+    this.spinButton.setText('SPINNING...');
+    this.sfx.play('reelSpin');
+
+    // Schedule per-column reel-stop thuds
+    for (let c = 0; c < GameConfig.cols; c++) {
+      setTimeout(() => this.sfx.play('reelStop', { pitch: -c }), 500 + c * 200);
     }
+
+    try {
+      await this.slotGrid.animateReelSpin(() => {
+        const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+        if (this.currentLevelDef!.hasBlockers) {
+          this.placeBlockers(gridData, this.currentLevelDef!);
+        }
+        this.match3.setGrid(gridData);
+      });
+    } catch (err) {
+      console.error('Auto-spin error:', err);
+      const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+      if (this.currentLevelDef!.hasBlockers) {
+        this.placeBlockers(gridData, this.currentLevelDef!);
+      }
+      this.match3.setGrid(gridData);
+    }
+
+    // Cascade resolve phase
+    this.fsm.transition('CASCADE_RESOLVE');
+    await this.resolveCascades();
+
+    // Into match-3 phase
+    this.fsm.transition('MATCH3_PHASE');
   }
 
   private async handleSpin(): Promise<void> {
@@ -723,8 +755,16 @@ export class Game {
 
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
-      await delay(500);
-      this.endMatchPhase();
+      // If power-ups remain, let the player activate them for free
+      if (this.hasPowerUpsOnBoard()) {
+        this.hud.showMessage('Tap power-ups to activate!', 2500);
+        this.spinButton.setText('TAP POWER-UPS!');
+        this.slotGrid.startPowerUpGlow();
+        // Keep grid interactive for power-up taps (swaps still blocked by movesRemaining check)
+      } else {
+        await delay(500);
+        this.endMatchPhase();
+      }
     } else {
       // Check for dead board after swap resolves
       this.checkForDeadBoard();
@@ -756,8 +796,19 @@ export class Game {
     }
   }
 
+  /** Check if any power-ups exist on the current board */
+  private hasPowerUpsOnBoard(): boolean {
+    const grid = this.match3.getGrid();
+    for (let r = 0; r < GameConfig.rows; r++) {
+      for (let c = 0; c < GameConfig.cols; c++) {
+        if (grid[r]?.[c]?.powerUp) return true;
+      }
+    }
+    return false;
+  }
+
   private async handlePowerUpActivation(row: number, col: number): Promise<void> {
-    if (this.fsm.state !== 'MATCH3_PHASE' || this.movesRemaining <= 0) return;
+    if (this.fsm.state !== 'MATCH3_PHASE') return;
 
     const grid = this.match3.getGrid();
     const cell = grid[row]?.[col];
@@ -795,10 +846,12 @@ export class Game {
       effects.showRainbowEffect(clearedPositions);
     }
 
-    // Costs 1 move
-    this.movesRemaining--;
-    this.hud.setMoves(this.movesRemaining);
-    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+    // Costs 1 move only if player still has moves; free when moves are depleted
+    if (this.movesRemaining > 0) {
+      this.movesRemaining--;
+      this.hud.setMoves(this.movesRemaining);
+      this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+    }
 
     // Track collections from cleared cells
     for (const pos of result.cleared) {
@@ -840,12 +893,18 @@ export class Game {
     this.slotGrid.setInteractive(true);
     this.startHintTimer();
 
-    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+    this.spinButton.setText(this.movesRemaining > 0 ? `MOVES: ${this.movesRemaining}` : 'TAP POWER-UPS!');
 
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
-      await delay(500);
-      this.endMatchPhase();
+      // If more power-ups remain on the board, let the player keep tapping
+      if (this.hasPowerUpsOnBoard()) {
+        this.hud.showMessage('Tap power-ups to activate!', 2000);
+        this.slotGrid.startPowerUpGlow();
+      } else {
+        await delay(500);
+        this.endMatchPhase();
+      }
     } else {
       this.checkForDeadBoard();
     }

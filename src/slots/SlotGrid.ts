@@ -67,6 +67,9 @@ export class SlotGrid extends Container {
   // Power-up glow
   private powerUpGlowTweens: gsap.core.Tween[] = [];
 
+  // Spin clipping mask
+  private spinMask: Graphics | null = null;
+
   // Drag state
   private dragStart: { row: number; col: number; px: number; py: number } | null = null;
   private isDragging = false;
@@ -376,15 +379,45 @@ export class SlotGrid extends Container {
     await tl.then();
   }
 
+  /** Apply a clipping mask to hide symbols outside the grid frame during spin */
+  private applySpinMask(): void {
+    this.removeSpinMask();
+    const rows = GameConfig.rows;
+    const cols = GameConfig.cols;
+    const totalW = cols * (CELL + GAP) - GAP;
+    const totalH = rows * (CELL + GAP) - GAP;
+    const offsetX = -totalW / 2;
+    const offsetY = -totalH / 2;
+    const pad = 8; // small padding so symbols aren't clipped at the frame edge
+
+    this.spinMask = new Graphics();
+    this.spinMask.roundRect(offsetX - pad, offsetY - pad, totalW + pad * 2, totalH + pad * 2, 10);
+    this.spinMask.fill({ color: 0xffffff });
+    this.addChild(this.spinMask);
+    this.mask = this.spinMask;
+  }
+
+  /** Remove the spin clipping mask */
+  private removeSpinMask(): void {
+    this.mask = null;
+    if (this.spinMask) {
+      this.spinMask.destroy();
+      this.spinMask = null;
+    }
+  }
+
   /**
    * Slot-style reel spin: current symbols scroll downward off-screen per column,
    * then new grid is rendered and new symbols scroll down from above with bounce.
    * Each column stops at a different time (left first, right last).
+   * A mask clips symbols to the grid frame so nothing leaks outside.
    */
   async animateReelSpin(generateNewGrid: () => void): Promise<void> {
     const rows = GameConfig.rows;
     const cols = GameConfig.cols;
-    const totalH = rows * (CELL + GAP) - GAP;
+
+    // Apply mask so symbols don't show outside the grid frame
+    this.applySpinMask();
 
     // Phase 1: Scroll current symbols downward off-screen
     const scrollOut = gsap.timeline();
@@ -429,6 +462,9 @@ export class SlotGrid extends Container {
       }
     }
     await scrollIn.then();
+
+    // Remove mask so effects/hints aren't clipped during gameplay
+    this.removeSpinMask();
   }
 
   // Animate gravity drop for cells that moved down
