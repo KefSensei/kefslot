@@ -7,6 +7,11 @@ export interface LevelGoal {
   current: number;
 }
 
+export interface LevelIntroDef {
+  title: string;
+  description: string;
+}
+
 export interface LevelDef {
   id: number;
   world: number;
@@ -16,5 +21,10 @@ export interface LevelDef {
   goals: Omit<LevelGoal, 'current'>[];
   availableSymbolIds: string[];
   hasBlockers: boolean;
+  blockerType?: 'ice' | 'stone';
+  blockerCount?: number;
+  blockerTypeSecondary?: 'ice' | 'stone';
+  blockerCountSecondary?: number;
   starThresholds: [number, number, number]; // score thresholds for 1/2/3 stars
+  intro?: LevelIntroDef;
 }

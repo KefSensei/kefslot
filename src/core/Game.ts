@@ -12,6 +12,7 @@ import { HUD } from '@/ui/HUD';
 import { SpinButton } from '@/ui/SpinButton';
 import { LevelSelect } from '@/ui/LevelSelect';
 import { LevelComplete } from '@/ui/LevelComplete';
+import { LevelIntro } from '@/ui/LevelIntro';
 import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
@@ -41,7 +42,23 @@ export class Game {
   private hud!: HUD;
   private spinButton!: SpinButton;
   private levelComplete!: LevelComplete;
+  private levelIntro!: LevelIntro;
   private goalDisplay!: Container;
+
+  // Layout references for relayout
+  private gameBg!: Graphics;
+  private gameTopGrad!: Graphics;
+  private gameAmbientGlow!: Graphics;
+  private gameHeader!: Text;
+  private _isPortrait: boolean | null = null; // null = not yet laid out
+
+  // Menu scene layout references
+  private menuBg!: Graphics;
+  private menuGlow!: Graphics;
+  private menuTitle!: Text;
+  private menuSub!: Text;
+  private menuRoxyContainer!: Container;
+  private menuPlayBtn!: Container;
 
   // Game state
   private currentLevelDef: LevelDef | null = null;
@@ -52,6 +69,7 @@ export class Game {
   private powerUpCount = 0;
   private goals: LevelGoal[] = [];
   private collectCounts: Record<string, number> = {};
+  private blockersCleared = 0;
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: Application) {
@@ -71,20 +89,23 @@ export class Game {
   }
 
   private buildMenuScene(): void {
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+
     // Gradient background
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x1a0a2e });
-    this.menuScene.addChild(bg);
+    this.menuBg = new Graphics();
+    this.menuBg.rect(0, 0, w, h);
+    this.menuBg.fill({ color: 0x1a0a2e });
+    this.menuScene.addChild(this.menuBg);
 
     // Ambient glow behind center
-    const glow = new Graphics();
-    glow.circle(GameConfig.width / 2, 350, 250);
-    glow.fill({ color: 0x9b59b6, alpha: 0.1 });
-    this.menuScene.addChild(glow);
+    this.menuGlow = new Graphics();
+    this.menuGlow.circle(w / 2, h * 0.5, 250);
+    this.menuGlow.fill({ color: 0x9b59b6, alpha: 0.1 });
+    this.menuScene.addChild(this.menuGlow);
 
     // Title
-    const title = new Text({
+    this.menuTitle = new Text({
       text: "Roxy's\nMagic Reels",
       style: new TextStyle({
         fontSize: 48,
@@ -100,66 +121,70 @@ export class Game {
         },
       }),
     });
-    title.anchor.set(0.5);
-    title.x = GameConfig.width / 2;
-    title.y = 180;
-    this.menuScene.addChild(title);
+    this.menuTitle.anchor.set(0.5);
+    this.menuTitle.x = w / 2;
+    this.menuTitle.y = h * 0.22;
+    this.menuScene.addChild(this.menuTitle);
 
     // Subtitle
-    const sub = new Text({
+    this.menuSub = new Text({
       text: 'A Slot + Match-3 Adventure',
       style: new TextStyle({ fontSize: 18, fill: 0xb0a0c0, fontFamily: 'Segoe UI, sans-serif' }),
     });
-    sub.anchor.set(0.5);
-    sub.x = GameConfig.width / 2;
-    sub.y = 260;
-    this.menuScene.addChild(sub);
+    this.menuSub.anchor.set(0.5);
+    this.menuSub.x = w / 2;
+    this.menuSub.y = h * 0.34;
+    this.menuScene.addChild(this.menuSub);
 
-    // Roxy placeholder (simple character)
+    // Roxy placeholder (simple character) — drawn at origin, positioned via container
+    this.menuRoxyContainer = new Container();
+    this.menuRoxyContainer.x = w / 2;
+    this.menuRoxyContainer.y = h * 0.48;
     const roxy = new Graphics();
     // Body
-    roxy.circle(GameConfig.width / 2, 360, 30);
+    roxy.circle(0, 0, 30);
     roxy.fill({ color: 0xf39c12 });
     // Hat
-    roxy.moveTo(GameConfig.width / 2 - 25, 335);
-    roxy.lineTo(GameConfig.width / 2, 295);
-    roxy.lineTo(GameConfig.width / 2 + 25, 335);
+    roxy.moveTo(-25, -25);
+    roxy.lineTo(0, -65);
+    roxy.lineTo(25, -25);
     roxy.closePath();
     roxy.fill({ color: 0x9b59b6 });
     // Eyes
-    roxy.circle(GameConfig.width / 2 - 10, 355, 4);
-    roxy.circle(GameConfig.width / 2 + 10, 355, 4);
+    roxy.circle(-10, -5, 4);
+    roxy.circle(10, -5, 4);
     roxy.fill({ color: 0x000000 });
     // Smile
-    roxy.arc(GameConfig.width / 2, 365, 10, 0, Math.PI);
+    roxy.arc(0, 5, 10, 0, Math.PI);
     roxy.stroke({ color: 0x000000, width: 2 });
-    this.menuScene.addChild(roxy);
+    this.menuRoxyContainer.addChild(roxy);
+    this.menuScene.addChild(this.menuRoxyContainer);
 
     // Play button
-    const playBtn = new Container();
-    playBtn.x = GameConfig.width / 2;
-    playBtn.y = 460;
+    this.menuPlayBtn = new Container();
+    this.menuPlayBtn.x = w / 2;
+    this.menuPlayBtn.y = h * 0.64;
     const playBg = new Graphics();
     playBg.roundRect(-90, -30, 180, 60, 30);
     playBg.fill({ color: 0x9b59b6 });
     playBg.stroke({ color: 0xf1c40f, width: 3 });
-    playBtn.addChild(playBg);
+    this.menuPlayBtn.addChild(playBg);
 
     const playText = new Text({
       text: 'PLAY',
       style: new TextStyle({ fontSize: 26, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'Segoe UI, sans-serif', letterSpacing: 6 }),
     });
     playText.anchor.set(0.5);
-    playBtn.addChild(playText);
+    this.menuPlayBtn.addChild(playText);
 
-    playBtn.eventMode = 'static';
-    playBtn.cursor = 'pointer';
-    playBtn.on('pointerdown', () => {
+    this.menuPlayBtn.eventMode = 'static';
+    this.menuPlayBtn.cursor = 'pointer';
+    this.menuPlayBtn.on('pointerdown', () => {
       this.sfx.play('buttonPress');
       this.music.load();
       this.fsm.transition('LEVEL_SELECT');
     });
-    this.menuScene.addChild(playBtn);
+    this.menuScene.addChild(this.menuPlayBtn);
 
     // Starfield on menu
     this.addStarfield(this.menuScene);
@@ -179,28 +204,28 @@ export class Game {
 
   private buildGameScene(): void {
     // Gradient background (dark purple → near-black)
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x0d0520 });
-    this.gameScene.addChild(bg);
+    this.gameBg = new Graphics();
+    this.gameBg.rect(0, 0, GameConfig.width, GameConfig.height);
+    this.gameBg.fill({ color: 0x0d0520 });
+    this.gameScene.addChild(this.gameBg);
 
     // Upper gradient overlay (lighter purple fade)
-    const topGrad = new Graphics();
-    topGrad.rect(0, 0, GameConfig.width, 200);
-    topGrad.fill({ color: 0x2a1050, alpha: 0.4 });
-    this.gameScene.addChild(topGrad);
+    this.gameTopGrad = new Graphics();
+    this.gameTopGrad.rect(0, 0, GameConfig.width, 200);
+    this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
+    this.gameScene.addChild(this.gameTopGrad);
 
     // Ambient glow behind slot machine
-    const ambientGlow = new Graphics();
-    ambientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
-    ambientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
-    this.gameScene.addChild(ambientGlow);
+    this.gameAmbientGlow = new Graphics();
+    this.gameAmbientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
+    this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
+    this.gameScene.addChild(this.gameAmbientGlow);
 
     // Starfield
     this.addStarfield(this.gameScene);
 
     // Header plate: "ROXY'S MAGIC REELS"
-    const header = new Text({
+    this.gameHeader = new Text({
       text: "ROXY'S MAGIC REELS",
       style: new TextStyle({
         fontSize: 20,
@@ -211,10 +236,10 @@ export class Game {
         dropShadow: { color: 0x000000, distance: 2, alpha: 0.5 },
       }),
     });
-    header.anchor.set(0.5);
-    header.x = GameConfig.width / 2;
-    header.y = 78;
-    this.gameScene.addChild(header);
+    this.gameHeader.anchor.set(0.5);
+    this.gameHeader.x = GameConfig.width / 2;
+    this.gameHeader.y = 78;
+    this.gameScene.addChild(this.gameHeader);
 
     // HUD
     this.hud = new HUD();
@@ -233,6 +258,7 @@ export class Game {
     this.slotGrid.x = GameConfig.width / 2;
     this.slotGrid.y = GameConfig.height / 2 - 20;
     this.slotGrid.onSwapAttempt = (r1, c1, r2, c2) => this.handleSwap(r1, c1, r2, c2);
+    this.slotGrid.onPowerUpTap = (r, c) => this.handlePowerUpActivation(r, c);
     this.gameScene.addChild(this.slotGrid);
 
     // Spin Button
@@ -248,12 +274,88 @@ export class Game {
     this.goalDisplay.y = GameConfig.height - 90;
     this.gameScene.addChild(this.goalDisplay);
 
+    // Level Intro overlay
+    this.levelIntro = new LevelIntro();
+    this.gameScene.addChild(this.levelIntro);
+
     // Level Complete overlay
     this.levelComplete = new LevelComplete();
     this.gameScene.addChild(this.levelComplete);
 
     this.gameScene.visible = false;
     this.app.stage.addChild(this.gameScene);
+  }
+
+  /** Reposition all game elements for portrait or landscape layout */
+  relayout(isPortrait: boolean): void {
+    if (this._isPortrait === isPortrait) return;
+    this._isPortrait = isPortrait;
+
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+
+    // Redraw backgrounds to fit active canvas
+    this.gameBg.clear();
+    this.gameBg.rect(0, 0, w, h);
+    this.gameBg.fill({ color: 0x0d0520 });
+
+    this.gameTopGrad.clear();
+    this.gameTopGrad.rect(0, 0, w, 200);
+    this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
+
+    this.gameAmbientGlow.clear();
+    this.gameAmbientGlow.circle(w / 2, h / 2 - 20, 280);
+    this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
+
+    // Header
+    if (isPortrait) {
+      this.gameHeader.visible = false; // hide in portrait to save space
+    } else {
+      this.gameHeader.visible = true;
+      this.gameHeader.x = w / 2;
+      this.gameHeader.y = 78;
+    }
+
+    // Grid — center in the available space
+    this.slotGrid.x = w / 2;
+    this.slotGrid.y = isPortrait ? h / 2 - 60 : h / 2 - 20;
+
+    // Spin button
+    this.spinButton.x = w / 2;
+    this.spinButton.y = isPortrait ? h - 55 : h - 45;
+    this.spinButton.setPortrait(isPortrait);
+
+    // Goal display
+    this.goalDisplay.x = w / 2;
+    this.goalDisplay.y = isPortrait ? h - 110 : h - 90;
+
+    // HUD
+    this.hud.setPortrait(isPortrait);
+
+    // Overlays — reposition panel centers
+    this.levelIntro.relayout(w, h);
+    this.levelComplete.relayout(w, h);
+
+    // Menu scene
+    this.menuBg.clear();
+    this.menuBg.rect(0, 0, w, h);
+    this.menuBg.fill({ color: 0x1a0a2e });
+
+    this.menuGlow.clear();
+    this.menuGlow.circle(w / 2, h * 0.5, 250);
+    this.menuGlow.fill({ color: 0x9b59b6, alpha: 0.1 });
+
+    this.menuTitle.x = w / 2;
+    this.menuTitle.y = h * 0.22;
+    this.menuSub.x = w / 2;
+    this.menuSub.y = h * 0.34;
+    this.menuRoxyContainer.x = w / 2;
+    this.menuRoxyContainer.y = h * 0.48;
+    this.menuPlayBtn.x = w / 2;
+    this.menuPlayBtn.y = h * 0.64;
+
+    // Level select uses activeWidth/activeHeight in build(), so refresh it
+    this.levelSelectScene?.refresh();
   }
 
   /** Add floating starfield particles to a scene */
@@ -321,13 +423,14 @@ export class Game {
         this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
         this.hud.showMessage('Drag to swap symbols!', 2000);
         this.startHintTimer();
+        this.slotGrid.startPowerUpGlow();
         // Check for dead board (no valid swaps)
         this.checkForDeadBoard();
         break;
     }
   }
 
-  private startLevel(levelId: number): void {
+  private async startLevel(levelId: number): Promise<void> {
     const def = getLevelConfig(levelId);
     if (!def) return;
 
@@ -337,6 +440,7 @@ export class Game {
     this.totalScore = 0;
     this.cascadeCount = 0;
     this.powerUpCount = 0;
+    this.blockersCleared = 0;
     this.collectCounts = {};
     this.goals = def.goals.map(g => ({ ...g, current: 0 }));
 
@@ -353,7 +457,23 @@ export class Game {
     // Generate initial grid
     this.match3.setLevel(levelId);
     const gridData = this.slotGrid.generateGrid(levelId);
+
+    // Place blockers if configured
+    if (def.hasBlockers) {
+      this.placeBlockers(gridData, def);
+      this.slotGrid.renderGrid();
+    }
+
     this.match3.setGrid(gridData);
+
+    // Show game scene before intro so it's visible behind the overlay
+    this.showScene('game');
+
+    // Show level intro overlay if configured
+    if (def.intro) {
+      this.sfx.play('levelIntro');
+      await this.levelIntro.show(def.intro);
+    }
 
     // Transition to game
     if (this.fsm.state === 'LEVEL_SELECT') {
@@ -371,6 +491,7 @@ export class Game {
     if (this.fsm.state === 'MATCH3_PHASE') {
       this.clearHintTimer();
       this.slotGrid.clearHint();
+      this.slotGrid.stopPowerUpGlow();
       this.slotGrid.setInteractive(false);
     }
 
@@ -391,11 +512,18 @@ export class Game {
       // Unified reel spin: scroll down old, generate new, scroll in new
       await this.slotGrid.animateReelSpin(() => {
         const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+        // Place blockers on every spin so the mechanic persists
+        if (this.currentLevelDef!.hasBlockers) {
+          this.placeBlockers(gridData, this.currentLevelDef!);
+        }
         this.match3.setGrid(gridData);
       });
     } catch (err) {
       console.error('Spin error:', err);
       const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+      if (this.currentLevelDef!.hasBlockers) {
+        this.placeBlockers(gridData, this.currentLevelDef!);
+      }
       this.match3.setGrid(gridData);
     }
 
@@ -466,6 +594,21 @@ export class Game {
         grid[pos.row][pos.col] = null;
       }
 
+      // Damage adjacent blockers
+      const blockerResult = this.match3.damageAdjacentBlockers(allCells);
+      this.blockersCleared += blockerResult.destroyed.length;
+      for (const _pos of blockerResult.destroyed) {
+        this.sfx.play('blockerBreak');
+      }
+      for (const _pos of blockerResult.damaged) {
+        this.sfx.play('blockerCrack');
+      }
+      // Remove destroyed blockers from grid
+      for (const pos of blockerResult.destroyed) {
+        grid[pos.row][pos.col] = null;
+      }
+      this.updateGoalProgress();
+
       // Gravity
       this.applyGravityToGrid(grid);
 
@@ -529,6 +672,7 @@ export class Game {
     this.hud.setScore(this.totalScore);
     this.cascadeCount += result.cascades;
     this.powerUpCount += result.powerUpsCreated.length;
+    this.blockersCleared += result.blockersDestroyed;
 
     // Track collections from match-3 phase
     for (const match of result.matches) {
@@ -612,9 +756,155 @@ export class Game {
     }
   }
 
+  private async handlePowerUpActivation(row: number, col: number): Promise<void> {
+    if (this.fsm.state !== 'MATCH3_PHASE' || this.movesRemaining <= 0) return;
+
+    const grid = this.match3.getGrid();
+    const cell = grid[row]?.[col];
+    if (!cell?.powerUp) return;
+
+    const powerUpType = cell.powerUp;
+
+    // Disable interaction during activation
+    this.slotGrid.setInteractive(false);
+    this.clearHintTimer();
+    this.slotGrid.clearHint();
+
+    this.sfx.play('powerUpActivate');
+
+    // Activate the power-up in the engine
+    const result = this.match3.activatePowerUp(row, col);
+    if (result.cleared.length === 0) {
+      this.slotGrid.setInteractive(true);
+      return;
+    }
+
+    // Show power-up activation effect
+    const effects = this.slotGrid.getEffects();
+    const clearedPositions = result.cleared
+      .map(p => this.slotGrid.getCellPosition(p.row, p.col))
+      .filter((p): p is { x: number; y: number } => p !== null);
+    const originPos = this.slotGrid.getCellPosition(row, col);
+
+    if (powerUpType === 'blast' && originPos) {
+      const isRow = result.cleared.every(c => c.row === row);
+      effects.showBlastEffect(clearedPositions, isRow);
+    } else if (powerUpType === 'bomb' && originPos) {
+      effects.showBombEffect(originPos.x, originPos.y);
+    } else if (powerUpType === 'rainbow') {
+      effects.showRainbowEffect(clearedPositions);
+    }
+
+    // Costs 1 move
+    this.movesRemaining--;
+    this.hud.setMoves(this.movesRemaining);
+    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+
+    // Track collections from cleared cells
+    for (const pos of result.cleared) {
+      const clearedCell = grid[pos.row]?.[pos.col]; // already null, but we tracked before
+    }
+
+    // Score
+    this.totalScore += result.score;
+    this.hud.setScore(this.totalScore);
+    this.powerUpCount++;
+
+    // Damage adjacent blockers
+    const blockerResult = this.match3.damageAdjacentBlockers(result.cleared);
+    this.blockersCleared += blockerResult.destroyed.length;
+    for (const pos of blockerResult.destroyed) {
+      this.sfx.play('blockerBreak');
+    }
+    for (const pos of blockerResult.damaged) {
+      this.sfx.play('blockerCrack');
+    }
+
+    this.updateGoalProgress();
+
+    // Animate clear
+    this.sfx.play('confetti');
+    await this.slotGrid.animateClear(result.cleared, result.score);
+
+    // Apply gravity and fill
+    const updatedGrid = this.match3.getGrid();
+    this.applyGravityToGrid(updatedGrid);
+    this.fillGridEmpty(updatedGrid);
+    this.match3.setGrid(updatedGrid);
+    await this.slotGrid.animateGravityDrop(updatedGrid);
+
+    // Resolve any cascades that form after gravity
+    await this.resolveCascades();
+
+    // Re-enable interaction
+    this.slotGrid.setInteractive(true);
+    this.startHintTimer();
+
+    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+
+    // Check if moves depleted
+    if (this.movesRemaining <= 0) {
+      await delay(500);
+      this.endMatchPhase();
+    } else {
+      this.checkForDeadBoard();
+    }
+  }
+
+  private placeBlockers(grid: (CellData | null)[][], def: import('@/models/Level').LevelDef): void {
+    // Build a list of blocker batches (primary + optional secondary type)
+    const batches: { count: number; health: number }[] = [];
+    const primaryCount = def.blockerCount ?? 0;
+    const primaryType = def.blockerType ?? 'ice';
+    if (primaryCount > 0) {
+      batches.push({ count: primaryCount, health: primaryType === 'ice' ? 1 : 2 });
+    }
+    const secondaryCount = def.blockerCountSecondary ?? 0;
+    const secondaryType = def.blockerTypeSecondary ?? 'ice';
+    if (secondaryCount > 0) {
+      batches.push({ count: secondaryCount, health: secondaryType === 'ice' ? 1 : 2 });
+    }
+
+    const totalCount = batches.reduce((s, b) => s + b.count, 0);
+    if (totalCount === 0) return;
+
+    // Collect valid positions (avoid corners for better gameplay)
+    const positions: { r: number; c: number }[] = [];
+    for (let r = 0; r < GameConfig.rows; r++) {
+      for (let c = 0; c < GameConfig.cols; c++) {
+        const isCorner = (r === 0 || r === GameConfig.rows - 1) && (c === 0 || c === GameConfig.cols - 1);
+        if (!isCorner && grid[r][c]) {
+          positions.push({ r, c });
+        }
+      }
+    }
+
+    // Shuffle
+    for (let i = positions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
+
+    // Place blockers from each batch sequentially
+    let idx = 0;
+    for (const batch of batches) {
+      const toPlace = Math.min(batch.count, positions.length - idx);
+      for (let i = 0; i < toPlace; i++) {
+        const { r, c } = positions[idx];
+        const cell = grid[r][c];
+        if (cell) {
+          cell.isBlocker = true;
+          cell.blockerHealth = batch.health;
+        }
+        idx++;
+      }
+    }
+  }
+
   private endMatchPhase(): void {
     this.clearHintTimer();
     this.slotGrid.clearHint();
+    this.slotGrid.stopPowerUpGlow();
     this.slotGrid.setInteractive(false);
     this.fsm.transition('SCORING');
 
@@ -689,6 +979,7 @@ export class Game {
           goal.current = this.powerUpCount;
           break;
         case 'clear_blockers':
+          goal.current = this.blockersCleared;
           break;
       }
     }
@@ -734,10 +1025,16 @@ export class Game {
     for (let c = 0; c < GameConfig.cols; c++) {
       let writeRow = GameConfig.rows - 1;
       for (let r = GameConfig.rows - 1; r >= 0; r--) {
-        if (grid[r][c]) {
+        const cell = grid[r][c];
+        if (cell?.isBlocker) {
+          // Blocker stays fixed — restart write pointer above it
+          writeRow = r - 1;
+          continue;
+        }
+        if (cell) {
           if (r !== writeRow) {
-            grid[writeRow][c] = grid[r][c];
-            grid[writeRow][c]!.row = writeRow;
+            grid[writeRow][c] = cell;
+            cell.row = writeRow;
             grid[r][c] = null;
           }
           writeRow--;

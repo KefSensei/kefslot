@@ -64,11 +64,15 @@ export class SlotGrid extends Container {
   private hintGraphics: Graphics[] = [];
   private hintTweens: gsap.core.Tween[] = [];
 
+  // Power-up glow
+  private powerUpGlowTweens: gsap.core.Tween[] = [];
+
   // Drag state
   private dragStart: { row: number; col: number; px: number; py: number } | null = null;
   private isDragging = false;
 
   onSwapAttempt: ((r1: number, c1: number, r2: number, c2: number) => void) | null = null;
+  onPowerUpTap: ((row: number, col: number) => void) | null = null;
 
   constructor() {
     super();
@@ -150,7 +154,7 @@ export class SlotGrid extends Container {
           sprite.cursor = 'pointer';
           sprite.on('pointerdown', (e: FederatedPointerEvent) => this.onDragStart(r, c, e));
           sprite.on('pointermove', (e: FederatedPointerEvent) => this.onDragMove(r, c, e));
-          sprite.on('pointerup', () => this.onDragEnd());
+          sprite.on('pointerup', (e: FederatedPointerEvent) => this.onDragEnd(e));
           sprite.on('pointerupoutside', () => this.onDragEnd());
         } else {
           this.cells[r][c] = null;
@@ -291,6 +295,39 @@ export class SlotGrid extends Container {
       repeatDelay: 5,
       ease: 'none',
     });
+  }
+
+  /** Pulse power-up cells to invite tapping */
+  startPowerUpGlow(): void {
+    this.stopPowerUpGlow();
+    for (let r = 0; r < this.cells.length; r++) {
+      for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
+        const sprite = this.cells[r]?.[c];
+        if (sprite?.data.powerUp) {
+          const tw = gsap.to(sprite, {
+            alpha: 0.6,
+            duration: 0.5,
+            yoyo: true,
+            repeat: -1,
+            ease: 'sine.inOut',
+          });
+          this.powerUpGlowTweens.push(tw);
+        }
+      }
+    }
+  }
+
+  /** Stop power-up pulsing */
+  stopPowerUpGlow(): void {
+    for (const tw of this.powerUpGlowTweens) tw.kill();
+    this.powerUpGlowTweens = [];
+    // Reset alpha
+    for (let r = 0; r < this.cells.length; r++) {
+      for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
+        const sprite = this.cells[r]?.[c];
+        if (sprite) sprite.alpha = 1;
+      }
+    }
   }
 
   setInteractive(enabled: boolean): void {
@@ -528,7 +565,8 @@ export class SlotGrid extends Container {
     const local = e.getLocalPosition(this);
     const dx = local.x - this.dragStart.px;
     const dy = local.y - this.dragStart.py;
-    const threshold = CELL * 0.4;
+    // Lower threshold on touch devices for easier finger swiping
+    const threshold = GameConfig.isTouch ? CELL * 0.25 : CELL * 0.4;
 
     if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
       let dr = 0, dc = 0;
@@ -552,9 +590,27 @@ export class SlotGrid extends Container {
     }
   }
 
-  private onDragEnd(): void {
+  private onDragEnd(e?: FederatedPointerEvent): void {
     if (this.dragStart) {
-      this.cells[this.dragStart.row]?.[this.dragStart.col]?.setSelected(false);
+      const { row, col } = this.dragStart;
+      this.cells[row]?.[col]?.setSelected(false);
+
+      // Detect tap (no significant movement): activate power-up if present
+      if (e && this._interactive) {
+        const local = e.getLocalPosition(this);
+        const dx = local.x - this.dragStart.px;
+        const dy = local.y - this.dragStart.py;
+        const tapRadius = GameConfig.isTouch ? 15 : 5;
+        if (Math.abs(dx) < tapRadius && Math.abs(dy) < tapRadius) {
+          const cellData = this.gridData[row]?.[col];
+          if (cellData?.powerUp) {
+            this.dragStart = null;
+            this.isDragging = false;
+            this.onPowerUpTap?.(row, col);
+            return;
+          }
+        }
+      }
     }
     this.dragStart = null;
     this.isDragging = false;
@@ -586,6 +642,12 @@ class CellSprite extends Container {
     if (data.powerUp) {
       const puIcon = this.createPowerUpIndicator(data.powerUp);
       this.addChild(puIcon);
+    }
+
+    // Blocker overlay
+    if (data.isBlocker) {
+      const blockerOverlay = this.createBlockerOverlay(data.blockerHealth, size);
+      this.addChild(blockerOverlay);
     }
 
     // Selection highlight
@@ -700,16 +762,69 @@ class CellSprite extends Container {
     }
   }
 
-  private createPowerUpIndicator(type: PowerUpType): Graphics {
-    const g = new Graphics();
+  private createPowerUpIndicator(type: PowerUpType): Container {
+    const container = new Container();
     const size = CELL;
     const color = type === 'blast' ? 0x00e5ff : type === 'bomb' ? 0xff5722 : 0xffd700;
-    // Glowing ring
-    g.circle(size - 12, 12, 10);
-    g.fill({ color, alpha: 0.3 });
-    g.circle(size - 12, 12, 7);
-    g.fill({ color });
-    g.stroke({ color: 0xffffff, width: 1.5 });
+    const label = type === 'blast' ? 'BLAST' : type === 'bomb' ? 'BOMB' : 'RAINBOW';
+
+    // Full-width banner at bottom of cell
+    const bg = new Graphics();
+    bg.roundRect(2, size - 22, size - 4, 20, 4);
+    bg.fill({ color: 0x000000, alpha: 0.7 });
+    bg.stroke({ color, width: 1.5, alpha: 0.9 });
+    container.addChild(bg);
+
+    const text = new Text({
+      text: label,
+      style: new TextStyle({
+        fontSize: 11,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        fill: color,
+        letterSpacing: 1,
+      }),
+    });
+    text.anchor.set(0.5);
+    text.x = size / 2;
+    text.y = size - 12;
+    container.addChild(text);
+
+    return container;
+  }
+
+  private createBlockerOverlay(health: number, size: number): Graphics {
+    const g = new Graphics();
+    if (health >= 2) {
+      // Stone: gray overlay with cross-hatch
+      g.roundRect(2, 2, size - 4, size - 4, 6);
+      g.fill({ color: 0x888888, alpha: 0.55 });
+      g.stroke({ color: 0x666666, width: 2 });
+      // Cross-hatch pattern
+      g.moveTo(size * 0.2, size * 0.2);
+      g.lineTo(size * 0.8, size * 0.8);
+      g.stroke({ color: 0x555555, width: 1.5, alpha: 0.5 });
+      g.moveTo(size * 0.8, size * 0.2);
+      g.lineTo(size * 0.2, size * 0.8);
+      g.stroke({ color: 0x555555, width: 1.5, alpha: 0.5 });
+      // "2" indicator
+      g.circle(size / 2, size / 2, 12);
+      g.fill({ color: 0x444444, alpha: 0.7 });
+      g.stroke({ color: 0xaaaaaa, width: 1 });
+    } else {
+      // Ice: blue-white translucent overlay with diagonal cracks
+      g.roundRect(2, 2, size - 4, size - 4, 6);
+      g.fill({ color: 0xaaddff, alpha: 0.45 });
+      g.stroke({ color: 0x88ccff, width: 2, alpha: 0.7 });
+      // Diagonal crack lines
+      g.moveTo(size * 0.15, size * 0.3);
+      g.lineTo(size * 0.45, size * 0.55);
+      g.lineTo(size * 0.35, size * 0.75);
+      g.stroke({ color: 0xffffff, width: 1.5, alpha: 0.6 });
+      g.moveTo(size * 0.6, size * 0.15);
+      g.lineTo(size * 0.7, size * 0.45);
+      g.stroke({ color: 0xffffff, width: 1, alpha: 0.4 });
+    }
     return g;
   }
 }

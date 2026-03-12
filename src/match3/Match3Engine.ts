@@ -11,6 +11,7 @@ export interface SwapResult {
   powerUpsCreated: { row: number; col: number; type: PowerUpType }[];
   score: number;
   cascades: number;
+  blockersDestroyed: number;
 }
 
 export class Match3Engine {
@@ -36,6 +37,8 @@ export class Match3Engine {
   isValidSwap(r1: number, c1: number, r2: number, c2: number): boolean {
     if (!this.isAdjacent(r1, c1, r2, c2)) return false;
     if (!this.grid[r1][c1] || !this.grid[r2][c2]) return false;
+    // Blockers cannot be swapped
+    if (this.grid[r1][c1]!.isBlocker || this.grid[r2][c2]!.isBlocker) return false;
 
     // Swap temporarily
     this.swap(r1, c1, r2, c2);
@@ -49,7 +52,7 @@ export class Match3Engine {
   // Execute a swap and resolve all resulting matches + cascades
   async executeSwap(r1: number, c1: number, r2: number, c2: number): Promise<SwapResult> {
     if (!this.isValidSwap(r1, c1, r2, c2)) {
-      return { valid: false, matches: [], powerUpsCreated: [], score: 0, cascades: 0 };
+      return { valid: false, matches: [], powerUpsCreated: [], score: 0, cascades: 0, blockersDestroyed: 0 };
     }
 
     this.swap(r1, c1, r2, c2);
@@ -57,6 +60,7 @@ export class Match3Engine {
 
     let totalScore = 0;
     let cascadeLevel = 0;
+    let totalBlockersDestroyed = 0;
     const allMatches: MatchGroup[] = [];
     const allPowerUps: { row: number; col: number; type: PowerUpType }[] = [];
 
@@ -87,6 +91,14 @@ export class Match3Engine {
       this.clearMatches(matches);
       events.emit('matchCleared', { matches, cascadeLevel });
 
+      // Damage blockers adjacent to cleared cells
+      const allCells = matches.flatMap(m => m.cells);
+      const blockerResult = this.damageAdjacentBlockers(allCells);
+      for (const pos of blockerResult.destroyed) {
+        this.grid[pos.row][pos.col] = null;
+      }
+      totalBlockersDestroyed += blockerResult.destroyed.length;
+
       // Place power-ups
       for (const pu of allPowerUps) {
         if (!this.grid[pu.row][pu.col]) {
@@ -110,7 +122,7 @@ export class Match3Engine {
       matches = this.cascade.findMatches(this.grid);
     }
 
-    return { valid: true, matches: allMatches, powerUpsCreated: allPowerUps, score: totalScore, cascades: cascadeLevel };
+    return { valid: true, matches: allMatches, powerUpsCreated: allPowerUps, score: totalScore, cascades: cascadeLevel, blockersDestroyed: totalBlockersDestroyed };
   }
 
   // Activate a power-up at the given position
@@ -157,6 +169,44 @@ export class Match3Engine {
     }
 
     return { cleared, score: cleared.length * GameConfig.baseSymbolScore * 3 };
+  }
+
+  /** Damage blockers adjacent to cleared cells. Returns damaged and destroyed blocker positions. */
+  damageAdjacentBlockers(clearedPositions: { row: number; col: number }[]): {
+    damaged: { row: number; col: number; newHealth: number }[];
+    destroyed: { row: number; col: number }[];
+  } {
+    const damaged: { row: number; col: number; newHealth: number }[] = [];
+    const destroyed: { row: number; col: number }[] = [];
+    const processed = new Set<string>();
+
+    for (const pos of clearedPositions) {
+      const neighbors = [
+        { row: pos.row - 1, col: pos.col },
+        { row: pos.row + 1, col: pos.col },
+        { row: pos.row, col: pos.col - 1 },
+        { row: pos.row, col: pos.col + 1 },
+      ];
+      for (const n of neighbors) {
+        if (n.row < 0 || n.row >= this.rows || n.col < 0 || n.col >= this.cols) continue;
+        const key = `${n.row},${n.col}`;
+        if (processed.has(key)) continue;
+
+        const cell = this.grid[n.row]?.[n.col];
+        if (cell?.isBlocker) {
+          processed.add(key);
+          cell.blockerHealth--;
+          if (cell.blockerHealth <= 0) {
+            cell.isBlocker = false;
+            cell.blockerHealth = 0;
+            destroyed.push({ row: n.row, col: n.col });
+          } else {
+            damaged.push({ row: n.row, col: n.col, newHealth: cell.blockerHealth });
+          }
+        }
+      }
+    }
+    return { damaged, destroyed };
   }
 
   /** Find a valid swap hint — returns the first valid adjacent pair or null */
@@ -226,10 +276,16 @@ export class Match3Engine {
     for (let c = 0; c < this.cols; c++) {
       let writeRow = this.rows - 1;
       for (let r = this.rows - 1; r >= 0; r--) {
-        if (this.grid[r][c]) {
+        const cell = this.grid[r][c];
+        if (cell?.isBlocker) {
+          // Blocker stays fixed — restart write pointer above it
+          writeRow = r - 1;
+          continue;
+        }
+        if (cell) {
           if (r !== writeRow) {
-            this.grid[writeRow][c] = this.grid[r][c];
-            this.grid[writeRow][c]!.row = writeRow;
+            this.grid[writeRow][c] = cell;
+            cell.row = writeRow;
             this.grid[r][c] = null;
           }
           writeRow--;

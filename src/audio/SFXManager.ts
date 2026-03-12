@@ -19,7 +19,11 @@ export type SFXName =
   | 'starEarned'
   | 'levelComplete'
   | 'levelFailed'
-  | 'coinEarned';
+  | 'coinEarned'
+  | 'levelIntro'
+  | 'powerUpActivate'
+  | 'blockerCrack'
+  | 'blockerBreak';
 
 export interface SFXOptions {
   pitch?: number;        // semitone offset
@@ -69,6 +73,10 @@ export class SFXManager {
       case 'levelComplete': this.playLevelComplete(t, vol); break;
       case 'levelFailed':   this.playLevelFailed(t, vol); break;
       case 'coinEarned':    this.playCoinEarned(t, vol); break;
+      case 'levelIntro':    this.playLevelIntro(t, vol); break;
+      case 'powerUpActivate': this.playPowerUpActivate(t, vol); break;
+      case 'blockerCrack':  this.playBlockerCrack(t, vol); break;
+      case 'blockerBreak':  this.playBlockerBreak(t, vol); break;
     }
   }
 
@@ -355,5 +363,43 @@ export class SFXManager {
     this.tone(2200, t + 0.04, 0.08, vol * 0.35, 'sine', 0.002, 0.06);
     // Tiny noise for metallic texture
     this.noise(t, 0.04, vol * 0.08, 8000, 'highpass');
+  }
+
+  private playLevelIntro(t: number, vol: number): void {
+    // Magical ascending chime: C5-E5-G5 with shimmer
+    const notes = [523, 659, 784];
+    for (let i = 0; i < notes.length; i++) {
+      this.tone(notes[i], t + i * 0.1, 0.3, vol * 0.4, 'sine', 0.005, 0.25);
+    }
+    // High sparkle
+    this.tone(1568, t + 0.3, 0.2, vol * 0.2, 'sine', 0.005, 0.15);
+    // Shimmer noise tail
+    this.noise(t + 0.15, 0.3, vol * 0.08, 5000, 'highpass');
+  }
+
+  private playPowerUpActivate(t: number, vol: number): void {
+    // Whoosh sweep up + bright impact
+    this.sweep(200, 2000, t, 0.2, vol * 0.4, 'sine');
+    this.tone(1500, t + 0.15, 0.15, vol * 0.5, 'sine', 0.005, 0.12);
+    this.tone(2000, t + 0.18, 0.12, vol * 0.3, 'sine', 0.005, 0.1);
+    // Impact noise
+    this.noise(t + 0.12, 0.15, vol * 0.2, 3000, 'bandpass');
+  }
+
+  private playBlockerCrack(t: number, vol: number): void {
+    // Short crunch: noise burst + low thud
+    this.noise(t, 0.08, vol * 0.4, 2000, 'bandpass');
+    this.tone(200, t, 0.1, vol * 0.3, 'square', 0.002, 0.08);
+    this.tone(150, t + 0.02, 0.08, vol * 0.2, 'sine', 0.002, 0.06);
+  }
+
+  private playBlockerBreak(t: number, vol: number): void {
+    // Glass shatter: noise burst + descending sweep + sparkle
+    this.noise(t, 0.2, vol * 0.5, 4000, 'highpass');
+    this.sweep(800, 200, t, 0.15, vol * 0.3, 'sine');
+    this.tone(1200, t + 0.05, 0.08, vol * 0.15, 'sine', 0.002, 0.06);
+    this.tone(1800, t + 0.08, 0.06, vol * 0.1, 'sine', 0.002, 0.04);
+    // Low thud
+    this.tone(100, t + 0.02, 0.12, vol * 0.25, 'sine', 0.005, 0.1);
   }
 }
