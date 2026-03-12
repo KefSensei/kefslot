@@ -150,7 +150,7 @@ export class HUD extends Container {
     });
     this.addChild(musicBtn);
 
-    // Message (center below HUD)
+    // Message (centered on slot grid)
     this.messageText = new Text({ text: '', style: new TextStyle({
       fontSize: 20,
       fill: 0xf1c40f,
@@ -164,7 +164,7 @@ export class HUD extends Container {
     })});
     this.messageText.anchor.set(0.5);
     this.messageText.x = GameConfig.width / 2;
-    this.messageText.y = 100;
+    this.messageText.y = GameConfig.height / 2 - 20;
     this.messageText.visible = false;
     this.addChild(this.messageText);
   }
