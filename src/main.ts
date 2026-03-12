@@ -1,4 +1,4 @@
-import { Application } from 'pixi.js';
+import { Application, Rectangle } from 'pixi.js';
 import { Game } from '@/core/Game';
 import { GameConfig } from '@/config/GameConfig';
 import gsap from 'gsap';
@@ -69,6 +69,12 @@ async function boot() {
     app.stage.x = (windowW - activeW * scale) / 2;
     app.stage.y = (windowH - activeH * scale) / 2;
 
+    // Update stage hitArea in local (virtual canvas) coordinates so pointer
+    // events reach children across the full active canvas — app.screen is in
+    // screen pixels which are smaller than local coords when the stage is
+    // scaled down, causing hit-test failures on the edges.
+    app.stage.hitArea = new Rectangle(0, 0, activeW, activeH);
+
     // Notify game of layout change
     game?.relayout(isPortrait);
   };
@@ -76,9 +82,8 @@ async function boot() {
   window.__kefslot_resize = resize;
   window.addEventListener('resize', resize);
 
-  // Ensure interactivity on stage
+  // Ensure interactivity on stage (hitArea is set in resize())
   app.stage.eventMode = 'static';
-  app.stage.hitArea = app.screen;
 
   // Start game
   game = new Game(app);

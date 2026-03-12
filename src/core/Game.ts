@@ -52,6 +52,14 @@ export class Game {
   private gameHeader!: Text;
   private _isPortrait: boolean | null = null; // null = not yet laid out
 
+  // Menu scene layout references
+  private menuBg!: Graphics;
+  private menuGlow!: Graphics;
+  private menuTitle!: Text;
+  private menuSub!: Text;
+  private menuRoxyContainer!: Container;
+  private menuPlayBtn!: Container;
+
   // Game state
   private currentLevelDef: LevelDef | null = null;
   private spinsRemaining = 0;
@@ -81,20 +89,23 @@ export class Game {
   }
 
   private buildMenuScene(): void {
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+
     // Gradient background
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x1a0a2e });
-    this.menuScene.addChild(bg);
+    this.menuBg = new Graphics();
+    this.menuBg.rect(0, 0, w, h);
+    this.menuBg.fill({ color: 0x1a0a2e });
+    this.menuScene.addChild(this.menuBg);
 
     // Ambient glow behind center
-    const glow = new Graphics();
-    glow.circle(GameConfig.width / 2, 350, 250);
-    glow.fill({ color: 0x9b59b6, alpha: 0.1 });
-    this.menuScene.addChild(glow);
+    this.menuGlow = new Graphics();
+    this.menuGlow.circle(w / 2, h * 0.5, 250);
+    this.menuGlow.fill({ color: 0x9b59b6, alpha: 0.1 });
+    this.menuScene.addChild(this.menuGlow);
 
     // Title
-    const title = new Text({
+    this.menuTitle = new Text({
       text: "Roxy's\nMagic Reels",
       style: new TextStyle({
         fontSize: 48,
@@ -110,66 +121,70 @@ export class Game {
         },
       }),
     });
-    title.anchor.set(0.5);
-    title.x = GameConfig.width / 2;
-    title.y = 180;
-    this.menuScene.addChild(title);
+    this.menuTitle.anchor.set(0.5);
+    this.menuTitle.x = w / 2;
+    this.menuTitle.y = h * 0.22;
+    this.menuScene.addChild(this.menuTitle);
 
     // Subtitle
-    const sub = new Text({
+    this.menuSub = new Text({
       text: 'A Slot + Match-3 Adventure',
       style: new TextStyle({ fontSize: 18, fill: 0xb0a0c0, fontFamily: 'Segoe UI, sans-serif' }),
     });
-    sub.anchor.set(0.5);
-    sub.x = GameConfig.width / 2;
-    sub.y = 260;
-    this.menuScene.addChild(sub);
+    this.menuSub.anchor.set(0.5);
+    this.menuSub.x = w / 2;
+    this.menuSub.y = h * 0.34;
+    this.menuScene.addChild(this.menuSub);
 
-    // Roxy placeholder (simple character)
+    // Roxy placeholder (simple character) — drawn at origin, positioned via container
+    this.menuRoxyContainer = new Container();
+    this.menuRoxyContainer.x = w / 2;
+    this.menuRoxyContainer.y = h * 0.48;
     const roxy = new Graphics();
     // Body
-    roxy.circle(GameConfig.width / 2, 360, 30);
+    roxy.circle(0, 0, 30);
     roxy.fill({ color: 0xf39c12 });
     // Hat
-    roxy.moveTo(GameConfig.width / 2 - 25, 335);
-    roxy.lineTo(GameConfig.width / 2, 295);
-    roxy.lineTo(GameConfig.width / 2 + 25, 335);
+    roxy.moveTo(-25, -25);
+    roxy.lineTo(0, -65);
+    roxy.lineTo(25, -25);
     roxy.closePath();
     roxy.fill({ color: 0x9b59b6 });
     // Eyes
-    roxy.circle(GameConfig.width / 2 - 10, 355, 4);
-    roxy.circle(GameConfig.width / 2 + 10, 355, 4);
+    roxy.circle(-10, -5, 4);
+    roxy.circle(10, -5, 4);
     roxy.fill({ color: 0x000000 });
     // Smile
-    roxy.arc(GameConfig.width / 2, 365, 10, 0, Math.PI);
+    roxy.arc(0, 5, 10, 0, Math.PI);
     roxy.stroke({ color: 0x000000, width: 2 });
-    this.menuScene.addChild(roxy);
+    this.menuRoxyContainer.addChild(roxy);
+    this.menuScene.addChild(this.menuRoxyContainer);
 
     // Play button
-    const playBtn = new Container();
-    playBtn.x = GameConfig.width / 2;
-    playBtn.y = 460;
+    this.menuPlayBtn = new Container();
+    this.menuPlayBtn.x = w / 2;
+    this.menuPlayBtn.y = h * 0.64;
     const playBg = new Graphics();
     playBg.roundRect(-90, -30, 180, 60, 30);
     playBg.fill({ color: 0x9b59b6 });
     playBg.stroke({ color: 0xf1c40f, width: 3 });
-    playBtn.addChild(playBg);
+    this.menuPlayBtn.addChild(playBg);
 
     const playText = new Text({
       text: 'PLAY',
       style: new TextStyle({ fontSize: 26, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'Segoe UI, sans-serif', letterSpacing: 6 }),
     });
     playText.anchor.set(0.5);
-    playBtn.addChild(playText);
+    this.menuPlayBtn.addChild(playText);
 
-    playBtn.eventMode = 'static';
-    playBtn.cursor = 'pointer';
-    playBtn.on('pointerdown', () => {
+    this.menuPlayBtn.eventMode = 'static';
+    this.menuPlayBtn.cursor = 'pointer';
+    this.menuPlayBtn.on('pointerdown', () => {
       this.sfx.play('buttonPress');
       this.music.load();
       this.fsm.transition('LEVEL_SELECT');
     });
-    this.menuScene.addChild(playBtn);
+    this.menuScene.addChild(this.menuPlayBtn);
 
     // Starfield on menu
     this.addStarfield(this.menuScene);
@@ -320,6 +335,24 @@ export class Game {
     // Overlays — reposition panel centers
     this.levelIntro.relayout(w, h);
     this.levelComplete.relayout(w, h);
+
+    // Menu scene
+    this.menuBg.clear();
+    this.menuBg.rect(0, 0, w, h);
+    this.menuBg.fill({ color: 0x1a0a2e });
+
+    this.menuGlow.clear();
+    this.menuGlow.circle(w / 2, h * 0.5, 250);
+    this.menuGlow.fill({ color: 0x9b59b6, alpha: 0.1 });
+
+    this.menuTitle.x = w / 2;
+    this.menuTitle.y = h * 0.22;
+    this.menuSub.x = w / 2;
+    this.menuSub.y = h * 0.34;
+    this.menuRoxyContainer.x = w / 2;
+    this.menuRoxyContainer.y = h * 0.48;
+    this.menuPlayBtn.x = w / 2;
+    this.menuPlayBtn.y = h * 0.64;
 
     // Level select uses activeWidth/activeHeight in build(), so refresh it
     this.levelSelectScene?.refresh();
