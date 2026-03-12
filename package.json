@@ -1,0 +1,21 @@
+{
+  "name": "kefslot",
+  "version": "1.0.0",
+  "description": "Roxy's Magic Reels - A Slot + Match-3 Hybrid Game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "gsap": "^3.14.2",
+    "howler": "^2.2.4",
+    "pixi.js": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.12",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0"
+  }
+}

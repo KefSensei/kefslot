@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/.bin/vite", "--port", "3005"],
+      "cwd": "/Users/eb/Documents/Projects/KefSlot",
+      "port": 3005,
+      "autoPort": true
+    }
+  ]
+}
