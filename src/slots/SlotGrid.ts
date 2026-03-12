@@ -760,17 +760,35 @@ class CellSprite extends Container {
     }
   }
 
-  private createPowerUpIndicator(type: PowerUpType): Graphics {
-    const g = new Graphics();
+  private createPowerUpIndicator(type: PowerUpType): Container {
+    const container = new Container();
     const size = CELL;
     const color = type === 'blast' ? 0x00e5ff : type === 'bomb' ? 0xff5722 : 0xffd700;
-    // Glowing ring
-    g.circle(size - 12, 12, 10);
-    g.fill({ color, alpha: 0.3 });
-    g.circle(size - 12, 12, 7);
-    g.fill({ color });
-    g.stroke({ color: 0xffffff, width: 1.5 });
-    return g;
+    const label = type === 'blast' ? 'BLAST' : type === 'bomb' ? 'BOMB' : 'RAINBOW';
+
+    // Full-width banner at bottom of cell
+    const bg = new Graphics();
+    bg.roundRect(2, size - 22, size - 4, 20, 4);
+    bg.fill({ color: 0x000000, alpha: 0.7 });
+    bg.stroke({ color, width: 1.5, alpha: 0.9 });
+    container.addChild(bg);
+
+    const text = new Text({
+      text: label,
+      style: new TextStyle({
+        fontSize: 11,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        fill: color,
+        letterSpacing: 1,
+      }),
+    });
+    text.anchor.set(0.5);
+    text.x = size / 2;
+    text.y = size - 12;
+    container.addChild(text);
+
+    return container;
   }
 
   private createBlockerOverlay(health: number, size: number): Graphics {

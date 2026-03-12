@@ -365,7 +365,7 @@ export class Game {
     const gridData = this.slotGrid.generateGrid(levelId);
 
     // Place blockers if configured
-    if (def.hasBlockers && def.blockerCount && def.blockerType) {
+    if (def.hasBlockers) {
       this.placeBlockers(gridData, def);
       this.slotGrid.renderGrid();
     }
@@ -418,11 +418,18 @@ export class Game {
       // Unified reel spin: scroll down old, generate new, scroll in new
       await this.slotGrid.animateReelSpin(() => {
         const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+        // Place blockers on every spin so the mechanic persists
+        if (this.currentLevelDef!.hasBlockers) {
+          this.placeBlockers(gridData, this.currentLevelDef!);
+        }
         this.match3.setGrid(gridData);
       });
     } catch (err) {
       console.error('Spin error:', err);
       const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+      if (this.currentLevelDef!.hasBlockers) {
+        this.placeBlockers(gridData, this.currentLevelDef!);
+      }
       this.match3.setGrid(gridData);
     }
 
@@ -751,15 +758,26 @@ export class Game {
   }
 
   private placeBlockers(grid: (CellData | null)[][], def: import('@/models/Level').LevelDef): void {
-    const count = def.blockerCount ?? 0;
-    const type = def.blockerType ?? 'ice';
-    const health = type === 'ice' ? 1 : 2;
+    // Build a list of blocker batches (primary + optional secondary type)
+    const batches: { count: number; health: number }[] = [];
+    const primaryCount = def.blockerCount ?? 0;
+    const primaryType = def.blockerType ?? 'ice';
+    if (primaryCount > 0) {
+      batches.push({ count: primaryCount, health: primaryType === 'ice' ? 1 : 2 });
+    }
+    const secondaryCount = def.blockerCountSecondary ?? 0;
+    const secondaryType = def.blockerTypeSecondary ?? 'ice';
+    if (secondaryCount > 0) {
+      batches.push({ count: secondaryCount, health: secondaryType === 'ice' ? 1 : 2 });
+    }
+
+    const totalCount = batches.reduce((s, b) => s + b.count, 0);
+    if (totalCount === 0) return;
 
     // Collect valid positions (avoid corners for better gameplay)
     const positions: { r: number; c: number }[] = [];
     for (let r = 0; r < GameConfig.rows; r++) {
       for (let c = 0; c < GameConfig.cols; c++) {
-        // Avoid corners
         const isCorner = (r === 0 || r === GameConfig.rows - 1) && (c === 0 || c === GameConfig.cols - 1);
         if (!isCorner && grid[r][c]) {
           positions.push({ r, c });
@@ -767,19 +785,24 @@ export class Game {
       }
     }
 
-    // Shuffle and pick
+    // Shuffle
     for (let i = positions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [positions[i], positions[j]] = [positions[j], positions[i]];
     }
 
-    const toPlace = Math.min(count, positions.length);
-    for (let i = 0; i < toPlace; i++) {
-      const { r, c } = positions[i];
-      const cell = grid[r][c];
-      if (cell) {
-        cell.isBlocker = true;
-        cell.blockerHealth = health;
+    // Place blockers from each batch sequentially
+    let idx = 0;
+    for (const batch of batches) {
+      const toPlace = Math.min(batch.count, positions.length - idx);
+      for (let i = 0; i < toPlace; i++) {
+        const { r, c } = positions[idx];
+        const cell = grid[r][c];
+        if (cell) {
+          cell.isBlocker = true;
+          cell.blockerHealth = batch.health;
+        }
+        idx++;
       }
     }
   }
