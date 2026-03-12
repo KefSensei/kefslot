@@ -11,6 +11,10 @@ export class HUD extends Container {
   private messageText: Text;
   private messageTimeout: ReturnType<typeof setTimeout> | null = null;
   private movesGlow: Graphics;
+  private musicBtnIcon: Graphics;
+  private _musicMuted = false;
+
+  onMusicToggle: ((muted: boolean) => void) | null = null;
 
   constructor() {
     super();
@@ -127,6 +131,25 @@ export class HUD extends Container {
     this.coinsText.y = 24;
     this.addChild(this.coinsText);
 
+    // Music mute button (top-right corner)
+    const musicBtn = new Container();
+    musicBtn.x = GameConfig.width - 30;
+    musicBtn.y = 30;
+    musicBtn.eventMode = 'static';
+    musicBtn.cursor = 'pointer';
+    musicBtn.hitArea = { contains: (x: number, y: number) => x >= -16 && x <= 16 && y >= -16 && y <= 16 };
+
+    this.musicBtnIcon = new Graphics();
+    musicBtn.addChild(this.musicBtnIcon);
+    this.drawMusicIcon(false);
+
+    musicBtn.on('pointerdown', () => {
+      this._musicMuted = !this._musicMuted;
+      this.drawMusicIcon(this._musicMuted);
+      this.onMusicToggle?.(this._musicMuted);
+    });
+    this.addChild(musicBtn);
+
     // Message (center below HUD)
     this.messageText = new Text({ text: '', style: new TextStyle({
       fontSize: 20,
@@ -198,5 +221,41 @@ export class HUD extends Container {
     this.messageTimeout = setTimeout(() => {
       this.messageText.visible = false;
     }, duration);
+  }
+
+  setMusicMuted(muted: boolean): void {
+    this._musicMuted = muted;
+    this.drawMusicIcon(muted);
+  }
+
+  private drawMusicIcon(muted: boolean): void {
+    const g = this.musicBtnIcon;
+    g.clear();
+
+    // Speaker body
+    g.moveTo(-6, -4);
+    g.lineTo(-2, -4);
+    g.lineTo(4, -9);
+    g.lineTo(4, 9);
+    g.lineTo(-2, 4);
+    g.lineTo(-6, 4);
+    g.closePath();
+    g.fill({ color: 0xb0a0c0 });
+
+    if (muted) {
+      // "X" slash
+      g.moveTo(7, -5);
+      g.lineTo(13, 5);
+      g.stroke({ color: 0xe74c3c, width: 2 });
+      g.moveTo(13, -5);
+      g.lineTo(7, 5);
+      g.stroke({ color: 0xe74c3c, width: 2 });
+    } else {
+      // Sound waves
+      g.arc(4, 0, 7, -Math.PI / 3, Math.PI / 3);
+      g.stroke({ color: 0xb0a0c0, width: 1.5 });
+      g.arc(4, 0, 11, -Math.PI / 3, Math.PI / 3);
+      g.stroke({ color: 0xb0a0c0, width: 1.5 });
+    }
   }
 }
