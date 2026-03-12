@@ -1,20 +1,64 @@
-import { Container, Graphics, Text, TextStyle, FederatedPointerEvent } from 'pixi.js';
+import { Container, Graphics, Text, TextStyle, FederatedPointerEvent, FillGradient } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { CellData, PowerUpType } from '@/models/Symbol';
 import { SymbolDef, getSymbolsForLevel } from '@/config/SymbolConfig';
 import { weightedRandom } from '@/utils/MathUtils';
 import { createCell } from '@/models/Symbol';
 import { MatchEffects } from '@/effects/MatchEffects';
+import { lightenColor, darkenColor, colorToHex } from '@/utils/ColorUtils';
 import gsap from 'gsap';
 
 const CELL = GameConfig.cellSize;
 const GAP = 4;
+
+// Cached gradients per symbol color
+const gradientCache = new Map<number, FillGradient>();
+function getSymbolGradient(color: number): FillGradient {
+  if (gradientCache.has(color)) return gradientCache.get(color)!;
+  const grad = new FillGradient({
+    type: 'linear',
+    colorStops: [
+      { offset: 0, color: colorToHex(lightenColor(color, 0.35)) },
+      { offset: 0.5, color: colorToHex(color) },
+      { offset: 1, color: colorToHex(darkenColor(color, 0.35)) },
+    ],
+    textureSpace: 'local',
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+  });
+  gradientCache.set(color, grad);
+  return grad;
+}
+
+// Gold frame gradient
+function createGoldGradient(vertical = false): FillGradient {
+  return new FillGradient({
+    type: 'linear',
+    colorStops: [
+      { offset: 0, color: '#8B7332' },
+      { offset: 0.4, color: '#D4AF37' },
+      { offset: 0.6, color: '#F5D060' },
+      { offset: 1, color: '#8B7332' },
+    ],
+    textureSpace: 'local',
+    start: vertical ? { x: 0.5, y: 0 } : { x: 0, y: 0.5 },
+    end: vertical ? { x: 0.5, y: 1 } : { x: 1, y: 0.5 },
+  });
+}
 
 export class SlotGrid extends Container {
   private cells: (CellSprite | null)[][] = [];
   private gridData: (CellData | null)[][] = [];
   private _interactive = false;
   private matchEffects: MatchEffects;
+
+  // Frame elements
+  private frameContainer = new Container();
+  private frameLightStrip: Graphics | null = null;
+
+  // Idle animation
+  private shimmerGraphic: Graphics | null = null;
+  private shimmerTween: gsap.core.Tween | null = null;
 
   // Drag state
   private dragStart: { row: number; col: number; px: number; py: number } | null = null;
@@ -24,6 +68,7 @@ export class SlotGrid extends Container {
 
   constructor() {
     super();
+    this.addChild(this.frameContainer);
     this.matchEffects = new MatchEffects();
     this.addChild(this.matchEffects);
   }
@@ -54,9 +99,12 @@ export class SlotGrid extends Container {
 
   // Sync visual to data
   renderGrid(): void {
-    // Keep effects layer, remove everything else
     const effectsRef = this.matchEffects;
+    const frameRef = this.frameContainer;
+
+    // Remove everything except frame and effects
     this.removeChildren();
+    this.addChild(frameRef);
     this.addChild(effectsRef);
     this.cells = [];
 
@@ -67,11 +115,20 @@ export class SlotGrid extends Container {
     const offsetX = -totalW / 2;
     const offsetY = -totalH / 2;
 
-    // Background panel
-    const bg = new Graphics();
-    bg.roundRect(offsetX - 12, offsetY - 12, totalW + 24, totalH + 24, 12);
-    bg.fill({ color: 0x0d0520, alpha: 0.6 });
-    this.addChildAt(bg, 0);
+    // Build slot machine frame
+    this.buildFrame(offsetX, offsetY, totalW, totalH);
+
+    // Cell tiles background
+    const tilesBg = new Graphics();
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const x = offsetX + c * (CELL + GAP);
+        const y = offsetY + r * (CELL + GAP);
+        tilesBg.roundRect(x, y, CELL, CELL, 6);
+        tilesBg.fill({ color: lightenColor(0x0d0520, 0.08), alpha: 0.7 });
+      }
+    }
+    this.addChildAt(tilesBg, 1);
 
     for (let r = 0; r < rows; r++) {
       this.cells[r] = [];
@@ -99,6 +156,137 @@ export class SlotGrid extends Container {
 
     // Make sure effects are on top
     this.setChildIndex(effectsRef, this.children.length - 1);
+
+    // Start idle animations
+    this.startIdleAnimations(offsetX, offsetY, totalW, totalH);
+  }
+
+  private buildFrame(offsetX: number, offsetY: number, totalW: number, totalH: number): void {
+    this.frameContainer.removeChildren();
+    const pad = 16;
+    const fx = offsetX - pad;
+    const fy = offsetY - pad;
+    const fw = totalW + pad * 2;
+    const fh = totalH + pad * 2;
+
+    // Dark background panel
+    const panel = new Graphics();
+    panel.roundRect(fx - 2, fy - 2, fw + 4, fh + 4, 14);
+    panel.fill({ color: 0x0d0520, alpha: 0.85 });
+    this.frameContainer.addChild(panel);
+
+    // Gold frame border
+    const frame = new Graphics();
+    frame.roundRect(fx, fy, fw, fh, 12);
+    frame.stroke({ color: 0xD4AF37, width: 4, alpha: 0.9 });
+    this.frameContainer.addChild(frame);
+
+    // Inner gold trim
+    const innerFrame = new Graphics();
+    innerFrame.roundRect(fx + 6, fy + 6, fw - 12, fh - 12, 8);
+    innerFrame.stroke({ color: 0xF5D060, width: 1.5, alpha: 0.4 });
+    this.frameContainer.addChild(innerFrame);
+
+    // Corner diamonds
+    const corners = [
+      { x: fx, y: fy },
+      { x: fx + fw, y: fy },
+      { x: fx, y: fy + fh },
+      { x: fx + fw, y: fy + fh },
+    ];
+    for (const corner of corners) {
+      const d = new Graphics();
+      const s = 8;
+      d.moveTo(corner.x, corner.y - s);
+      d.lineTo(corner.x + s, corner.y);
+      d.lineTo(corner.x, corner.y + s);
+      d.lineTo(corner.x - s, corner.y);
+      d.closePath();
+      d.fill({ color: 0xF5D060 });
+      this.frameContainer.addChild(d);
+    }
+
+    // Reel dividers (vertical lines between columns)
+    const cols = GameConfig.cols;
+    for (let c = 1; c < cols; c++) {
+      const lx = offsetX + c * (CELL + GAP) - GAP / 2;
+      const divider = new Graphics();
+      divider.moveTo(lx, offsetY - 4);
+      divider.lineTo(lx, offsetY + GameConfig.rows * (CELL + GAP) - GAP + 4);
+      divider.stroke({ color: 0x2a1050, width: 1.5, alpha: 0.5 });
+      this.frameContainer.addChild(divider);
+    }
+
+    // Light strip (pulses on wins)
+    this.frameLightStrip = new Graphics();
+    this.frameLightStrip.roundRect(fx + 3, fy + 3, fw - 6, fh - 6, 10);
+    this.frameLightStrip.stroke({ color: 0xF5D060, width: 2, alpha: 0 });
+    this.frameContainer.addChild(this.frameLightStrip);
+  }
+
+  /** Pulse the frame light strip (call on wins) */
+  pulseFrame(): void {
+    if (!this.frameLightStrip) return;
+    gsap.fromTo(this.frameLightStrip, { alpha: 0.8 }, { alpha: 0, duration: 0.6, ease: 'power2.out' });
+  }
+
+  private startIdleAnimations(offsetX: number, offsetY: number, totalW: number, totalH: number): void {
+    // Breathing pulse on cells
+    for (let r = 0; r < this.cells.length; r++) {
+      for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
+        const sprite = this.cells[r]?.[c];
+        if (sprite) {
+          const dur = 2.5 + Math.random() * 1.5;
+          const del = Math.random() * 3;
+          gsap.to(sprite.scale, {
+            x: 1.02, y: 1.02,
+            duration: dur,
+            delay: del,
+            yoyo: true,
+            repeat: -1,
+            ease: 'sine.inOut',
+          });
+        }
+      }
+    }
+
+    // Shimmer sweep
+    if (this.shimmerTween) this.shimmerTween.kill();
+    if (this.shimmerGraphic) {
+      this.shimmerGraphic.destroy();
+      this.shimmerGraphic = null;
+    }
+
+    const shimmer = new Graphics();
+    // Diagonal white stripe
+    const sw = 40;
+    shimmer.moveTo(0, -totalH);
+    shimmer.lineTo(sw, -totalH);
+    shimmer.lineTo(sw, totalH + 40);
+    shimmer.lineTo(0, totalH + 40);
+    shimmer.closePath();
+    shimmer.fill({ color: 0xffffff, alpha: 0.06 });
+    shimmer.rotation = 0.3;
+    shimmer.x = offsetX - 60;
+    shimmer.y = offsetY;
+    this.addChildAt(shimmer, 2);
+    this.shimmerGraphic = shimmer;
+
+    // Mask shimmer to grid area
+    const mask = new Graphics();
+    mask.roundRect(offsetX - 2, offsetY - 2, totalW + 4, totalH + 4, 8);
+    mask.fill({ color: 0xffffff });
+    this.addChild(mask);
+    shimmer.mask = mask;
+
+    this.shimmerTween = gsap.fromTo(shimmer, { x: offsetX - 80 }, {
+      x: offsetX + totalW + 80,
+      duration: 3,
+      delay: 2,
+      repeat: -1,
+      repeatDelay: 5,
+      ease: 'none',
+    });
   }
 
   setInteractive(enabled: boolean): void {
@@ -122,7 +310,7 @@ export class SlotGrid extends Container {
     for (const pos of positions) {
       const sprite = this.cells[pos.row]?.[pos.col];
       if (sprite) {
-        worldPositions.push({ x: sprite.x, y: sprite.y });
+        worldPositions.push({ x: sprite.x + CELL / 2, y: sprite.y + CELL / 2 });
         color = sprite.data.symbol.color;
         tl.to(sprite.scale, { x: 0, y: 0, duration: 0.25, ease: 'back.in' }, 0);
         tl.to(sprite, { alpha: 0, duration: 0.25 }, 0);
@@ -132,10 +320,15 @@ export class SlotGrid extends Container {
     // Confetti and floating score
     if (worldPositions.length > 0) {
       this.matchEffects.spawnConfetti(worldPositions, color);
+      this.pulseFrame();
       if (score && score > 0) {
         const cx = worldPositions.reduce((s, p) => s + p.x, 0) / worldPositions.length;
         const cy = worldPositions.reduce((s, p) => s + p.y, 0) / worldPositions.length;
         this.matchEffects.showFloatingScore(cx, cy, score, color);
+      }
+      // Screen flash on big matches
+      if (positions.length >= 5) {
+        this.matchEffects.screenFlash();
       }
     }
 
@@ -177,11 +370,9 @@ export class SlotGrid extends Container {
         const sprite = this.cells[r]?.[c];
         if (sprite) {
           const targetY = sprite.y;
-          // Start from way above, staggered per column like a slot reel
           sprite.y = targetY - 600 - r * 60;
           sprite.alpha = 1;
 
-          // Each column drops with a reel-like stagger
           const colDelay = c * 0.15;
           const rowDelay = r * 0.04;
 
@@ -200,7 +391,6 @@ export class SlotGrid extends Container {
   async animateGravityDrop(newData: (CellData | null)[][]): Promise<void> {
     const oldPositions = new Map<string, { x: number; y: number }>();
 
-    // Capture current positions by cell identity
     for (let r = 0; r < this.cells.length; r++) {
       for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
         const sprite = this.cells[r]?.[c];
@@ -214,7 +404,6 @@ export class SlotGrid extends Container {
     this.renderGrid();
 
     const tl = gsap.timeline();
-    const totalW = GameConfig.cols * (CELL + GAP) - GAP;
     const totalH = GameConfig.rows * (CELL + GAP) - GAP;
     const offsetY = -totalH / 2;
 
@@ -227,7 +416,6 @@ export class SlotGrid extends Container {
 
         const targetY = sprite.y;
 
-        // New cells (filled from top) start above the grid
         if (data.row !== r || !oldPositions.has(`${data.symbol.id}_${data.row}_${data.col}`)) {
           sprite.y = offsetY - 100 - Math.random() * 100;
           tl.to(sprite, {
@@ -288,7 +476,6 @@ export class SlotGrid extends Container {
     this.dragStart = { row, col, px: local.x, py: local.y };
     this.isDragging = true;
 
-    // Highlight the cell
     this.cells[row]?.[col]?.setSelected(true);
   }
 
@@ -301,7 +488,6 @@ export class SlotGrid extends Container {
     const threshold = CELL * 0.4;
 
     if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-      // Determine swap direction
       let dr = 0, dc = 0;
       if (Math.abs(dx) > Math.abs(dy)) {
         dc = dx > 0 ? 1 : -1;
@@ -312,12 +498,9 @@ export class SlotGrid extends Container {
       const tr = this.dragStart.row + dr;
       const tc = this.dragStart.col + dc;
 
-      // Validate target is in bounds
       if (tr >= 0 && tr < GameConfig.rows && tc >= 0 && tc < GameConfig.cols) {
-        // Clear highlight
         this.cells[this.dragStart.row]?.[this.dragStart.col]?.setSelected(false);
 
-        // Trigger swap
         const { row: sr, col: sc } = this.dragStart;
         this.dragStart = null;
         this.isDragging = false;
@@ -335,28 +518,25 @@ export class SlotGrid extends Container {
   }
 }
 
-// Individual cell visual
+// Gem-like cell visual with gradient, shadow, shine, bevel
 class CellSprite extends Container {
   private bg: Graphics;
   private icon: Graphics;
-  private cellLabel: Text;
   private selectHighlight: Graphics;
 
   constructor(public data: CellData) {
     super();
-
     const size = CELL;
 
-    // Background tile
+    // Background tile with subtle gradient center
     this.bg = new Graphics();
     this.bg.roundRect(0, 0, size, size, 8);
     this.bg.fill({ color: 0x1e0a3a, alpha: 0.8 });
-    this.bg.stroke({ color: data.symbol.color, width: 2, alpha: 0.5 });
     this.addChild(this.bg);
 
-    // Symbol shape
+    // Symbol shape with gem treatment
     this.icon = new Graphics();
-    this.drawShape(this.icon, data.symbol.shape, data.symbol.color, size);
+    this.drawGemShape(this.icon, data.symbol.shape, data.symbol.color, size);
     this.addChild(this.icon);
 
     // Power-up indicator
@@ -365,34 +545,52 @@ class CellSprite extends Container {
       this.addChild(puIcon);
     }
 
-    // Symbol label (first letter)
-    const style = new TextStyle({ fontSize: 11, fill: 0xffffff, fontFamily: 'monospace' });
-    this.cellLabel = new Text({ text: data.symbol.name.charAt(0), style });
-    this.cellLabel.x = 4;
-    this.cellLabel.y = 2;
-    this.addChild(this.cellLabel);
-
     // Selection highlight
     this.selectHighlight = new Graphics();
-    this.selectHighlight.roundRect(-2, -2, size + 4, size + 4, 10);
-    this.selectHighlight.stroke({ color: 0xf1c40f, width: 3, alpha: 0.9 });
+    this.selectHighlight.roundRect(-3, -3, size + 6, size + 6, 10);
+    this.selectHighlight.stroke({ color: 0xF5D060, width: 3, alpha: 0.9 });
     this.selectHighlight.visible = false;
     this.addChild(this.selectHighlight);
   }
 
   setSelected(selected: boolean): void {
     this.selectHighlight.visible = selected;
+    if (selected) {
+      gsap.fromTo(this.scale, { x: 1, y: 1 }, { x: 1.08, y: 1.08, duration: 0.15, ease: 'back.out' });
+    } else {
+      gsap.to(this.scale, { x: 1, y: 1, duration: 0.1 });
+    }
   }
 
-  private drawShape(g: Graphics, shape: string, color: number, size: number): void {
+  private drawGemShape(g: Graphics, shape: string, color: number, size: number): void {
     const cx = size / 2;
     const cy = size / 2;
     const r = size * 0.3;
+    const gradient = getSymbolGradient(color);
+    const darkColor = darkenColor(color, 0.5);
+    const lightColor = lightenColor(color, 0.4);
 
+    // 1. Drop shadow (same shape, offset, darker)
+    this.drawShapePath(g, shape, cx + 2, cy + 2, r);
+    g.fill({ color: darkColor, alpha: 0.4 });
+
+    // 2. Main gradient body
+    this.drawShapePath(g, shape, cx, cy, r);
+    g.fill(gradient);
+
+    // 3. Bevel stroke (light outer edge)
+    this.drawShapePath(g, shape, cx, cy, r);
+    g.stroke({ color: lightColor, width: 2, alpha: 0.4 });
+
+    // 4. Inner shine (small white ellipse, upper-left)
+    g.ellipse(cx - r * 0.25, cy - r * 0.3, r * 0.35, r * 0.2);
+    g.fill({ color: 0xffffff, alpha: 0.3 });
+  }
+
+  private drawShapePath(g: Graphics, shape: string, cx: number, cy: number, r: number): void {
     switch (shape) {
       case 'circle':
         g.circle(cx, cy, r);
-        g.fill({ color });
         break;
       case 'diamond':
         g.moveTo(cx, cy - r);
@@ -400,18 +598,15 @@ class CellSprite extends Container {
         g.lineTo(cx, cy + r);
         g.lineTo(cx - r, cy);
         g.closePath();
-        g.fill({ color });
         break;
       case 'square':
-        g.rect(cx - r * 0.8, cy - r * 0.8, r * 1.6, r * 1.6);
-        g.fill({ color });
+        g.roundRect(cx - r * 0.8, cy - r * 0.8, r * 1.6, r * 1.6, 4);
         break;
       case 'triangle':
         g.moveTo(cx, cy - r);
         g.lineTo(cx + r, cy + r * 0.7);
         g.lineTo(cx - r, cy + r * 0.7);
         g.closePath();
-        g.fill({ color });
         break;
       case 'star': {
         const spikes = 5;
@@ -426,7 +621,6 @@ class CellSprite extends Container {
           else g.lineTo(px, py);
         }
         g.closePath();
-        g.fill({ color });
         break;
       }
       case 'hexagon': {
@@ -438,7 +632,6 @@ class CellSprite extends Container {
           else g.lineTo(px, py);
         }
         g.closePath();
-        g.fill({ color });
         break;
       }
     }
@@ -448,7 +641,10 @@ class CellSprite extends Container {
     const g = new Graphics();
     const size = CELL;
     const color = type === 'blast' ? 0x00e5ff : type === 'bomb' ? 0xff5722 : 0xffd700;
-    g.circle(size - 12, 12, 8);
+    // Glowing ring
+    g.circle(size - 12, 12, 10);
+    g.fill({ color, alpha: 0.3 });
+    g.circle(size - 12, 12, 7);
     g.fill({ color });
     g.stroke({ color: 0xffffff, width: 1.5 });
     return g;

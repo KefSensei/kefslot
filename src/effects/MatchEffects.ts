@@ -2,22 +2,29 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import gsap from 'gsap';
 
 /**
- * Confetti + floating score numbers when matches happen.
+ * Enhanced confetti, floating scores, win lines, screen flash.
  */
 export class MatchEffects extends Container {
   /** Spawn confetti particles at the given world positions */
   spawnConfetti(positions: { x: number; y: number }[], color: number): void {
-    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4];
+    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xF5D060];
     for (const pos of positions) {
-      const count = 6;
+      const count = 10;
       for (let i = 0; i < count; i++) {
         const p = new Graphics();
         const c = colors[Math.floor(Math.random() * colors.length)];
-        const size = 3 + Math.random() * 5;
-        if (Math.random() < 0.5) {
+        const size = 3 + Math.random() * 6;
+        const shapeRoll = Math.random();
+        if (shapeRoll < 0.33) {
           p.rect(-size / 2, -size / 2, size, size);
-        } else {
+        } else if (shapeRoll < 0.66) {
           p.circle(0, 0, size / 2);
+        } else {
+          // Triangle confetti
+          p.moveTo(0, -size / 2);
+          p.lineTo(size / 2, size / 2);
+          p.lineTo(-size / 2, size / 2);
+          p.closePath();
         }
         p.fill({ color: c });
         p.x = pos.x;
@@ -26,16 +33,16 @@ export class MatchEffects extends Container {
         this.addChild(p);
 
         const angle = Math.random() * Math.PI * 2;
-        const dist = 40 + Math.random() * 80;
+        const dist = 50 + Math.random() * 100;
         const tx = pos.x + Math.cos(angle) * dist;
-        const ty = pos.y + Math.sin(angle) * dist - 30;
+        const ty = pos.y + Math.sin(angle) * dist - 40;
 
         gsap.to(p, {
           x: tx,
           y: ty,
           alpha: 0,
-          rotation: p.rotation + (Math.random() - 0.5) * 6,
-          duration: 0.6 + Math.random() * 0.4,
+          rotation: p.rotation + (Math.random() - 0.5) * 8,
+          duration: 0.7 + Math.random() * 0.5,
           ease: 'power2.out',
           onComplete: () => {
             p.destroy();
@@ -57,15 +64,15 @@ export class MatchEffects extends Container {
     const text = new Text({
       text: `+${score}`,
       style: new TextStyle({
-        fontSize: 28,
+        fontSize: 34,
         fill: color,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
-        stroke: { color: 0x000000, width: 3 },
+        stroke: { color: 0x000000, width: 4 },
         dropShadow: {
           color: 0x000000,
           distance: 2,
-          alpha: 0.5,
+          alpha: 0.6,
         },
       }),
     });
@@ -73,39 +80,36 @@ export class MatchEffects extends Container {
     text.x = x;
     text.y = y;
     text.alpha = 0;
+    text.scale.set(0.5);
     this.addChild(text);
 
-    gsap.to(text, {
-      y: y - 60,
-      alpha: 1,
-      duration: 0.3,
-      ease: 'power2.out',
-    });
-    gsap.to(text.scale, {
-      x: 1.3,
-      y: 1.3,
-      duration: 0.15,
-      yoyo: true,
-      repeat: 1,
-    });
-    gsap.to(text, {
-      y: y - 120,
-      alpha: 0,
-      duration: 0.5,
-      delay: 0.5,
-      ease: 'power2.in',
-      onComplete: () => {
-        text.destroy();
-      },
-    });
+    // Pop in: scale 0.5 → 1.4 → 1.0
+    const tl = gsap.timeline();
+    tl.to(text, { alpha: 1, duration: 0.15 }, 0);
+    tl.to(text.scale, { x: 1.4, y: 1.4, duration: 0.2, ease: 'back.out' }, 0);
+    tl.to(text.scale, { x: 1.0, y: 1.0, duration: 0.15 }, 0.2);
+    tl.to(text, { y: y - 80, duration: 0.8, ease: 'power2.out' }, 0);
+    tl.to(text, { alpha: 0, duration: 0.4, ease: 'power2.in', onComplete: () => text.destroy() }, 0.6);
   }
 
-  /** Show cascade multiplier burst */
+  /** Show cascade multiplier burst with expanding ring */
   showCascadeBurst(x: number, y: number, multiplier: number): void {
+    // Expanding ring
+    const ring = new Graphics();
+    ring.circle(0, 0, 20);
+    ring.stroke({ color: 0xff5722, width: 3, alpha: 0.8 });
+    ring.x = x;
+    ring.y = y;
+    this.addChild(ring);
+
+    gsap.to(ring.scale, { x: 5, y: 5, duration: 0.5, ease: 'power2.out' });
+    gsap.to(ring, { alpha: 0, duration: 0.5, ease: 'power2.out', onComplete: () => ring.destroy() });
+
+    // Multiplier text
     const text = new Text({
       text: `x${multiplier}`,
       style: new TextStyle({
-        fontSize: 36,
+        fontSize: 40,
         fill: 0xff5722,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
@@ -134,5 +138,41 @@ export class MatchEffects extends Container {
         text.destroy();
       },
     });
+  }
+
+  /** Full-screen white flash on big wins */
+  screenFlash(): void {
+    const flash = new Graphics();
+    flash.rect(-400, -400, 800, 800);
+    flash.fill({ color: 0xffffff, alpha: 0.3 });
+    this.addChild(flash);
+    gsap.to(flash, { alpha: 0, duration: 0.4, ease: 'power2.out', onComplete: () => flash.destroy() });
+  }
+
+  /** Draw a glowing win line through matched cell centers */
+  drawWinLine(positions: { x: number; y: number }[], color: number): void {
+    if (positions.length < 2) return;
+
+    // Glow layer (thick line)
+    const glow = new Graphics();
+    glow.moveTo(positions[0].x, positions[0].y);
+    for (let i = 1; i < positions.length; i++) {
+      glow.lineTo(positions[i].x, positions[i].y);
+    }
+    glow.stroke({ color, width: 8, alpha: 0.4 });
+    this.addChild(glow);
+
+    // Bright core line
+    const line = new Graphics();
+    line.moveTo(positions[0].x, positions[0].y);
+    for (let i = 1; i < positions.length; i++) {
+      line.lineTo(positions[i].x, positions[i].y);
+    }
+    line.stroke({ color: 0xffffff, width: 3, alpha: 0.9 });
+    this.addChild(line);
+
+    // Fade and remove
+    gsap.to(glow, { alpha: 0, duration: 0.8, delay: 0.3, onComplete: () => glow.destroy() });
+    gsap.to(line, { alpha: 0, duration: 0.8, delay: 0.3, onComplete: () => line.destroy() });
   }
 }

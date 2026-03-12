@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle, FillGradient } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { getLevelConfig } from '@/config/LevelConfig';
 import { StateMachine, GameState } from '@/core/StateMachine';
@@ -15,6 +15,7 @@ import { LevelComplete } from '@/ui/LevelComplete';
 import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
+import gsap from 'gsap';
 
 export class Game {
   private app: Application;
@@ -64,10 +65,17 @@ export class Game {
   }
 
   private buildMenuScene(): void {
+    // Gradient background
     const bg = new Graphics();
     bg.rect(0, 0, GameConfig.width, GameConfig.height);
     bg.fill({ color: 0x1a0a2e });
     this.menuScene.addChild(bg);
+
+    // Ambient glow behind center
+    const glow = new Graphics();
+    glow.circle(GameConfig.width / 2, 350, 250);
+    glow.fill({ color: 0x9b59b6, alpha: 0.1 });
+    this.menuScene.addChild(glow);
 
     // Title
     const title = new Text({
@@ -145,6 +153,9 @@ export class Game {
     });
     this.menuScene.addChild(playBtn);
 
+    // Starfield on menu
+    this.addStarfield(this.menuScene);
+
     this.app.stage.addChild(this.menuScene);
   }
 
@@ -158,11 +169,43 @@ export class Game {
   }
 
   private buildGameScene(): void {
-    // Background
+    // Gradient background (dark purple → near-black)
     const bg = new Graphics();
     bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x1a0a2e });
+    bg.fill({ color: 0x0d0520 });
     this.gameScene.addChild(bg);
+
+    // Upper gradient overlay (lighter purple fade)
+    const topGrad = new Graphics();
+    topGrad.rect(0, 0, GameConfig.width, 200);
+    topGrad.fill({ color: 0x2a1050, alpha: 0.4 });
+    this.gameScene.addChild(topGrad);
+
+    // Ambient glow behind slot machine
+    const ambientGlow = new Graphics();
+    ambientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
+    ambientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
+    this.gameScene.addChild(ambientGlow);
+
+    // Starfield
+    this.addStarfield(this.gameScene);
+
+    // Header plate: "ROXY'S MAGIC REELS"
+    const header = new Text({
+      text: "ROXY'S MAGIC REELS",
+      style: new TextStyle({
+        fontSize: 20,
+        fill: 0xF5D060,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        letterSpacing: 4,
+        dropShadow: { color: 0x000000, distance: 2, alpha: 0.5 },
+      }),
+    });
+    header.anchor.set(0.5);
+    header.x = GameConfig.width / 2;
+    header.y = 78;
+    this.gameScene.addChild(header);
 
     // HUD
     this.hud = new HUD();
@@ -194,6 +237,38 @@ export class Game {
 
     this.gameScene.visible = false;
     this.app.stage.addChild(this.gameScene);
+  }
+
+  /** Add floating starfield particles to a scene */
+  private addStarfield(scene: Container): void {
+    for (let i = 0; i < 30; i++) {
+      const star = new Graphics();
+      const size = 1 + Math.random() * 2;
+      star.circle(0, 0, size);
+      star.fill({ color: 0xffffff, alpha: 0.1 + Math.random() * 0.3 });
+      star.x = Math.random() * GameConfig.width;
+      star.y = Math.random() * GameConfig.height;
+      scene.addChildAt(star, Math.min(scene.children.length, 3));
+
+      // Twinkle
+      gsap.to(star, {
+        alpha: 0.1 + Math.random() * 0.5,
+        duration: 2 + Math.random() * 3,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inOut',
+        delay: Math.random() * 4,
+      });
+
+      // Slow drift
+      gsap.to(star, {
+        y: star.y + 20 + Math.random() * 30,
+        duration: 8 + Math.random() * 6,
+        yoyo: true,
+        repeat: -1,
+        ease: 'sine.inOut',
+      });
+    }
   }
 
   private showScene(scene: 'menu' | 'levelSelect' | 'game'): void {
