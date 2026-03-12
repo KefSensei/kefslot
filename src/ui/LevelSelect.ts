@@ -31,98 +31,122 @@ export class LevelSelect extends Container {
         fill: 0xf1c40f,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
+        dropShadow: { color: 0x000000, distance: 2, alpha: 0.5 },
       }),
     });
     title.anchor.set(0.5, 0);
     title.x = GameConfig.width / 2;
-    title.y = 20;
+    title.y = 16;
     this.addChild(title);
 
-    // Level buttons in a grid
+    // Group levels by world
+    const worldNames: Record<number, string> = { 1: 'Enchanted Meadow', 2: 'Crystal Caverns' };
+    const worlds = new Map<number, typeof LevelConfigs>();
+    for (const level of LevelConfigs) {
+      if (!worlds.has(level.world)) worlds.set(level.world, []);
+      worlds.get(level.world)!.push(level);
+    }
+
     const cols = 5;
-    const btnSize = 80;
-    const gap = 16;
-    const startX = (GameConfig.width - cols * (btnSize + gap) + gap) / 2;
-    const startY = 80;
+    const btnSize = 72;
+    const gap = 14;
+    const gridWidth = cols * (btnSize + gap) - gap;
+    const startX = (GameConfig.width - gridWidth) / 2;
+    let cursorY = 62; // vertical cursor for layout
 
-    let currentWorld = 0;
-
-    for (let i = 0; i < LevelConfigs.length; i++) {
-      const level = LevelConfigs[i];
-
+    for (const [worldId, levels] of worlds) {
       // World header
-      if (level.world !== currentWorld) {
-        currentWorld = level.world;
-        const worldNames = ['', 'Enchanted Meadow', 'Crystal Caverns'];
-        const worldLabel = new Text({
-          text: `World ${level.world}: ${worldNames[level.world]}`,
-          style: new TextStyle({ fontSize: 16, fill: 0xb0a0c0, fontFamily: 'Segoe UI, sans-serif' }),
-        });
-        worldLabel.x = startX;
-        worldLabel.y = startY + Math.floor(i / cols) * (btnSize + gap) - 22;
-        this.addChild(worldLabel);
-      }
-
-      const row = Math.floor(i / cols) + (level.world - 1); // offset for world headers
-      const col = i % cols;
-      const x = startX + col * (btnSize + gap);
-      const y = startY + row * (btnSize + gap) + (level.world - 1) * 20;
-
-      const unlocked = this.player.isLevelUnlocked(level.id);
-      const stars = this.player.getStars(level.id);
-
-      const btn = new Container();
-      btn.x = x;
-      btn.y = y;
-
-      // Button background
-      const btnBg = new Graphics();
-      btnBg.roundRect(0, 0, btnSize, btnSize, 10);
-      if (unlocked) {
-        btnBg.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a });
-        btnBg.stroke({ color: 0x9b59b6, width: 2 });
-      } else {
-        btnBg.fill({ color: 0x111111, alpha: 0.5 });
-        btnBg.stroke({ color: 0x333333, width: 1 });
-      }
-      btn.addChild(btnBg);
-
-      // Level number
-      const numText = new Text({
-        text: String(level.id),
+      const worldLabel = new Text({
+        text: `World ${worldId}: ${worldNames[worldId] ?? ''}`,
         style: new TextStyle({
-          fontSize: 22,
-          fill: unlocked ? 0xffffff : 0x555555,
+          fontSize: 18,
+          fill: 0xF5D060,
           fontWeight: 'bold',
           fontFamily: 'Segoe UI, sans-serif',
+          letterSpacing: 2,
         }),
       });
-      numText.anchor.set(0.5);
-      numText.x = btnSize / 2;
-      numText.y = btnSize / 2 - 6;
-      btn.addChild(numText);
+      worldLabel.x = startX;
+      worldLabel.y = cursorY;
+      this.addChild(worldLabel);
 
-      // Stars
-      if (stars > 0) {
-        const starsText = new Text({
-          text: '★'.repeat(stars) + '☆'.repeat(3 - stars),
-          style: new TextStyle({ fontSize: 12, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+      // Subtle divider line under header
+      const divider = new Graphics();
+      divider.moveTo(startX, cursorY + 24);
+      divider.lineTo(startX + gridWidth, cursorY + 24);
+      divider.stroke({ color: 0xF5D060, width: 1, alpha: 0.25 });
+      this.addChild(divider);
+
+      cursorY += 32; // space after header
+
+      // Layout level buttons in rows of 5
+      for (let i = 0; i < levels.length; i++) {
+        const level = levels[i];
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const x = startX + col * (btnSize + gap);
+        const y = cursorY + row * (btnSize + gap);
+
+        const unlocked = this.player.isLevelUnlocked(level.id);
+        const stars = this.player.getStars(level.id);
+
+        const btn = new Container();
+        btn.x = x;
+        btn.y = y;
+
+        // Button background
+        const btnBg = new Graphics();
+        btnBg.roundRect(0, 0, btnSize, btnSize, 10);
+        if (unlocked) {
+          btnBg.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a });
+          btnBg.stroke({ color: 0x9b59b6, width: 2 });
+        } else {
+          btnBg.fill({ color: 0x111111, alpha: 0.5 });
+          btnBg.stroke({ color: 0x333333, width: 1 });
+        }
+        btn.addChild(btnBg);
+
+        // Level number
+        const numText = new Text({
+          text: String(level.id),
+          style: new TextStyle({
+            fontSize: 20,
+            fill: unlocked ? 0xffffff : 0x555555,
+            fontWeight: 'bold',
+            fontFamily: 'Segoe UI, sans-serif',
+          }),
         });
-        starsText.anchor.set(0.5);
-        starsText.x = btnSize / 2;
-        starsText.y = btnSize - 14;
-        btn.addChild(starsText);
+        numText.anchor.set(0.5);
+        numText.x = btnSize / 2;
+        numText.y = btnSize / 2 - 6;
+        btn.addChild(numText);
+
+        // Stars
+        if (stars > 0) {
+          const starsText = new Text({
+            text: '★'.repeat(stars) + '☆'.repeat(3 - stars),
+            style: new TextStyle({ fontSize: 11, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+          });
+          starsText.anchor.set(0.5);
+          starsText.x = btnSize / 2;
+          starsText.y = btnSize - 12;
+          btn.addChild(starsText);
+        }
+
+        if (unlocked) {
+          btn.eventMode = 'static';
+          btn.cursor = 'pointer';
+          btn.on('pointerdown', () => {
+            this.onLevelChosen?.(level.id);
+          });
+        }
+
+        this.addChild(btn);
       }
 
-      if (unlocked) {
-        btn.eventMode = 'static';
-        btn.cursor = 'pointer';
-        btn.on('pointerdown', () => {
-          this.onLevelChosen?.(level.id);
-        });
-      }
-
-      this.addChild(btn);
+      // Advance cursor past this world's rows + spacing before next world
+      const rowCount = Math.ceil(levels.length / cols);
+      cursorY += rowCount * (btnSize + gap) + 16;
     }
   }
 }
