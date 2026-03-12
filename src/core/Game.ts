@@ -16,6 +16,7 @@ import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
 import gsap from 'gsap';
+import { MusicManager } from '@/audio/MusicManager';
 
 export class Game {
   private app: Application;
@@ -25,6 +26,7 @@ export class Game {
   // Engines
   private cascade = new CascadeEngine();
   private match3 = new Match3Engine();
+  private music = new MusicManager();
 
   // Scenes
   private menuScene = new Container();
@@ -150,6 +152,7 @@ export class Game {
     playBtn.eventMode = 'static';
     playBtn.cursor = 'pointer';
     playBtn.on('pointerdown', () => {
+      this.music.load();
       this.fsm.transition('LEVEL_SELECT');
     });
     this.menuScene.addChild(playBtn);
@@ -328,6 +331,9 @@ export class Game {
     this.hud.setCoins(this.player.coins);
     this.hud.setMultiplier(1);
     this.updateGoalDisplay();
+
+    // Start music (lead vocals only, stems layer in as score grows)
+    this.music.start();
 
     // Generate initial grid
     this.match3.setLevel(levelId);
@@ -557,6 +563,7 @@ export class Game {
       });
 
       this.levelComplete.onContinue = () => {
+        this.music.stop();
         if (passed) {
           this.fsm.transition('LEVEL_SELECT');
         } else {
@@ -589,6 +596,12 @@ export class Game {
       }
     }
     this.updateGoalDisplay();
+
+    // Update music stems based on score progress toward 3-star threshold
+    if (this.currentLevelDef) {
+      const maxScore = this.currentLevelDef.starThresholds[2];
+      this.music.setProgress(Math.min(1, this.totalScore / maxScore));
+    }
   }
 
   private updateGoalDisplay(): void {
