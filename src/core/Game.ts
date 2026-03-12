@@ -16,6 +16,7 @@ import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
 import gsap from 'gsap';
+import { MusicManager } from '@/audio/MusicManager';
 
 export class Game {
   private app: Application;
@@ -25,6 +26,7 @@ export class Game {
   // Engines
   private cascade = new CascadeEngine();
   private match3 = new Match3Engine();
+  private music = new MusicManager();
 
   // Scenes
   private menuScene = new Container();
@@ -47,6 +49,7 @@ export class Game {
   private powerUpCount = 0;
   private goals: LevelGoal[] = [];
   private collectCounts: Record<string, number> = {};
+  private hintTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: Application) {
     this.app = app;
@@ -149,6 +152,7 @@ export class Game {
     playBtn.eventMode = 'static';
     playBtn.cursor = 'pointer';
     playBtn.on('pointerdown', () => {
+      this.music.load();
       this.fsm.transition('LEVEL_SELECT');
     });
     this.menuScene.addChild(playBtn);
@@ -288,15 +292,22 @@ export class Game {
         break;
       case 'IDLE':
         this.showScene('game');
+        this.clearHintTimer();
+        this.slotGrid.clearHint();
         this.spinButton.setEnabled(this.spinsRemaining > 0);
         this.spinButton.setText(this.spinsRemaining > 0 ? 'SPIN' : 'DONE');
         this.slotGrid.setInteractive(false);
+        if (this.spinsRemaining > 0) {
+          this.spinButton.playAttention();
+          this.hud.showMessage('Press SPIN to start!', 2500);
+        }
         break;
       case 'MATCH3_PHASE':
         this.slotGrid.setInteractive(true);
         this.spinButton.setEnabled(false);
         this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
         this.hud.showMessage('Drag to swap symbols!', 2000);
+        this.startHintTimer();
         break;
     }
   }
@@ -320,6 +331,9 @@ export class Game {
     this.hud.setCoins(this.player.coins);
     this.hud.setMultiplier(1);
     this.updateGoalDisplay();
+
+    // Start music (lead vocals only, stems layer in as score grows)
+    this.music.start();
 
     // Generate initial grid
     this.match3.setLevel(levelId);
@@ -345,15 +359,11 @@ export class Game {
     this.spinButton.setEnabled(false);
 
     try {
-      // Animate spin out
-      await this.slotGrid.animateSpin();
-
-      // Generate new grid (allows initial matches for auto-resolve)
-      const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
-      this.match3.setGrid(gridData);
-
-      // Slot-style reel drop
-      await this.slotGrid.animateLand();
+      // Unified reel spin: scroll down old, generate new, scroll in new
+      await this.slotGrid.animateReelSpin(() => {
+        const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+        this.match3.setGrid(gridData);
+      });
     } catch (err) {
       console.error('Spin error:', err);
       const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
@@ -443,6 +453,10 @@ export class Game {
   private async handleSwap(r1: number, c1: number, r2: number, c2: number): Promise<void> {
     if (this.fsm.state !== 'MATCH3_PHASE' || this.movesRemaining <= 0) return;
 
+    // Clear hint on any swap attempt and restart timer
+    this.slotGrid.clearHint();
+    this.clearHintTimer();
+
     // Disable interaction during swap animation
     this.slotGrid.setInteractive(false);
 
@@ -501,6 +515,7 @@ export class Game {
 
     // Re-enable interaction
     this.slotGrid.setInteractive(true);
+    this.startHintTimer();
 
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
@@ -510,6 +525,8 @@ export class Game {
   }
 
   private endMatchPhase(): void {
+    this.clearHintTimer();
+    this.slotGrid.clearHint();
     this.slotGrid.setInteractive(false);
     this.fsm.transition('SCORING');
 
@@ -546,6 +563,7 @@ export class Game {
       });
 
       this.levelComplete.onContinue = () => {
+        this.music.stop();
         if (passed) {
           this.fsm.transition('LEVEL_SELECT');
         } else {
@@ -578,6 +596,12 @@ export class Game {
       }
     }
     this.updateGoalDisplay();
+
+    // Update music stems based on score progress toward 3-star threshold
+    if (this.currentLevelDef) {
+      const maxScore = this.currentLevelDef.starThresholds[2];
+      this.music.setProgress(Math.min(1, this.totalScore / maxScore));
+    }
   }
 
   private updateGoalDisplay(): void {
@@ -633,6 +657,24 @@ export class Game {
           grid[r][c] = createCell(weightedRandom(symbols), r, c);
         }
       }
+    }
+  }
+
+  private startHintTimer(): void {
+    this.clearHintTimer();
+    this.hintTimer = setTimeout(() => {
+      if (this.fsm.state !== 'MATCH3_PHASE') return;
+      const hint = this.match3.findHint();
+      if (hint) {
+        this.slotGrid.showHint(hint.r1, hint.c1, hint.r2, hint.c2);
+      }
+    }, 5000);
+  }
+
+  private clearHintTimer(): void {
+    if (this.hintTimer) {
+      clearTimeout(this.hintTimer);
+      this.hintTimer = null;
     }
   }
 }
