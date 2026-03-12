@@ -100,6 +100,17 @@ export class SpinButton extends Container {
     this.btnLabel.text = text;
   }
 
+  /** Attention-grabbing animation to prompt the player to press SPIN */
+  playAttention(): void {
+    const tl = gsap.timeline();
+    tl.to(this.scale, { x: 1.15, y: 1.15, duration: 0.25, ease: 'back.out' });
+    tl.to(this.scale, { x: 1.0, y: 1.0, duration: 0.2, ease: 'power2.inOut' });
+    tl.to(this.scale, { x: 1.1, y: 1.1, duration: 0.2, ease: 'back.out' });
+    tl.to(this.scale, { x: 1.0, y: 1.0, duration: 0.15 });
+    // Bright glow flash
+    gsap.to(this.glowRing, { alpha: 0.7, duration: 0.3, yoyo: true, repeat: 2, ease: 'sine.inOut' });
+  }
+
   private drawButton(color: number): void {
     this.bg.clear();
     this.bg.roundRect(-80, -28, 160, 56, 28);
