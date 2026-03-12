@@ -12,6 +12,7 @@ import { HUD } from '@/ui/HUD';
 import { SpinButton } from '@/ui/SpinButton';
 import { LevelSelect } from '@/ui/LevelSelect';
 import { LevelComplete } from '@/ui/LevelComplete';
+import { LevelIntro } from '@/ui/LevelIntro';
 import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
@@ -41,6 +42,7 @@ export class Game {
   private hud!: HUD;
   private spinButton!: SpinButton;
   private levelComplete!: LevelComplete;
+  private levelIntro!: LevelIntro;
   private goalDisplay!: Container;
 
   // Game state
@@ -52,6 +54,7 @@ export class Game {
   private powerUpCount = 0;
   private goals: LevelGoal[] = [];
   private collectCounts: Record<string, number> = {};
+  private blockersCleared = 0;
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: Application) {
@@ -233,6 +236,7 @@ export class Game {
     this.slotGrid.x = GameConfig.width / 2;
     this.slotGrid.y = GameConfig.height / 2 - 20;
     this.slotGrid.onSwapAttempt = (r1, c1, r2, c2) => this.handleSwap(r1, c1, r2, c2);
+    this.slotGrid.onPowerUpTap = (r, c) => this.handlePowerUpActivation(r, c);
     this.gameScene.addChild(this.slotGrid);
 
     // Spin Button
@@ -247,6 +251,10 @@ export class Game {
     this.goalDisplay.x = GameConfig.width / 2;
     this.goalDisplay.y = GameConfig.height - 90;
     this.gameScene.addChild(this.goalDisplay);
+
+    // Level Intro overlay
+    this.levelIntro = new LevelIntro();
+    this.gameScene.addChild(this.levelIntro);
 
     // Level Complete overlay
     this.levelComplete = new LevelComplete();
@@ -321,13 +329,14 @@ export class Game {
         this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
         this.hud.showMessage('Drag to swap symbols!', 2000);
         this.startHintTimer();
+        this.slotGrid.startPowerUpGlow();
         // Check for dead board (no valid swaps)
         this.checkForDeadBoard();
         break;
     }
   }
 
-  private startLevel(levelId: number): void {
+  private async startLevel(levelId: number): Promise<void> {
     const def = getLevelConfig(levelId);
     if (!def) return;
 
@@ -337,6 +346,7 @@ export class Game {
     this.totalScore = 0;
     this.cascadeCount = 0;
     this.powerUpCount = 0;
+    this.blockersCleared = 0;
     this.collectCounts = {};
     this.goals = def.goals.map(g => ({ ...g, current: 0 }));
 
@@ -353,7 +363,23 @@ export class Game {
     // Generate initial grid
     this.match3.setLevel(levelId);
     const gridData = this.slotGrid.generateGrid(levelId);
+
+    // Place blockers if configured
+    if (def.hasBlockers && def.blockerCount && def.blockerType) {
+      this.placeBlockers(gridData, def);
+      this.slotGrid.renderGrid();
+    }
+
     this.match3.setGrid(gridData);
+
+    // Show game scene before intro so it's visible behind the overlay
+    this.showScene('game');
+
+    // Show level intro overlay if configured
+    if (def.intro) {
+      this.sfx.play('levelIntro');
+      await this.levelIntro.show(def.intro);
+    }
 
     // Transition to game
     if (this.fsm.state === 'LEVEL_SELECT') {
@@ -371,6 +397,7 @@ export class Game {
     if (this.fsm.state === 'MATCH3_PHASE') {
       this.clearHintTimer();
       this.slotGrid.clearHint();
+      this.slotGrid.stopPowerUpGlow();
       this.slotGrid.setInteractive(false);
     }
 
@@ -466,6 +493,21 @@ export class Game {
         grid[pos.row][pos.col] = null;
       }
 
+      // Damage adjacent blockers
+      const blockerResult = this.match3.damageAdjacentBlockers(allCells);
+      this.blockersCleared += blockerResult.destroyed.length;
+      for (const _pos of blockerResult.destroyed) {
+        this.sfx.play('blockerBreak');
+      }
+      for (const _pos of blockerResult.damaged) {
+        this.sfx.play('blockerCrack');
+      }
+      // Remove destroyed blockers from grid
+      for (const pos of blockerResult.destroyed) {
+        grid[pos.row][pos.col] = null;
+      }
+      this.updateGoalProgress();
+
       // Gravity
       this.applyGravityToGrid(grid);
 
@@ -529,6 +571,7 @@ export class Game {
     this.hud.setScore(this.totalScore);
     this.cascadeCount += result.cascades;
     this.powerUpCount += result.powerUpsCreated.length;
+    this.blockersCleared += result.blockersDestroyed;
 
     // Track collections from match-3 phase
     for (const match of result.matches) {
@@ -612,9 +655,139 @@ export class Game {
     }
   }
 
+  private async handlePowerUpActivation(row: number, col: number): Promise<void> {
+    if (this.fsm.state !== 'MATCH3_PHASE' || this.movesRemaining <= 0) return;
+
+    const grid = this.match3.getGrid();
+    const cell = grid[row]?.[col];
+    if (!cell?.powerUp) return;
+
+    const powerUpType = cell.powerUp;
+
+    // Disable interaction during activation
+    this.slotGrid.setInteractive(false);
+    this.clearHintTimer();
+    this.slotGrid.clearHint();
+
+    this.sfx.play('powerUpActivate');
+
+    // Activate the power-up in the engine
+    const result = this.match3.activatePowerUp(row, col);
+    if (result.cleared.length === 0) {
+      this.slotGrid.setInteractive(true);
+      return;
+    }
+
+    // Show power-up activation effect
+    const effects = this.slotGrid.getEffects();
+    const clearedPositions = result.cleared
+      .map(p => this.slotGrid.getCellPosition(p.row, p.col))
+      .filter((p): p is { x: number; y: number } => p !== null);
+    const originPos = this.slotGrid.getCellPosition(row, col);
+
+    if (powerUpType === 'blast' && originPos) {
+      const isRow = result.cleared.every(c => c.row === row);
+      effects.showBlastEffect(clearedPositions, isRow);
+    } else if (powerUpType === 'bomb' && originPos) {
+      effects.showBombEffect(originPos.x, originPos.y);
+    } else if (powerUpType === 'rainbow') {
+      effects.showRainbowEffect(clearedPositions);
+    }
+
+    // Costs 1 move
+    this.movesRemaining--;
+    this.hud.setMoves(this.movesRemaining);
+    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+
+    // Track collections from cleared cells
+    for (const pos of result.cleared) {
+      const clearedCell = grid[pos.row]?.[pos.col]; // already null, but we tracked before
+    }
+
+    // Score
+    this.totalScore += result.score;
+    this.hud.setScore(this.totalScore);
+    this.powerUpCount++;
+
+    // Damage adjacent blockers
+    const blockerResult = this.match3.damageAdjacentBlockers(result.cleared);
+    this.blockersCleared += blockerResult.destroyed.length;
+    for (const pos of blockerResult.destroyed) {
+      this.sfx.play('blockerBreak');
+    }
+    for (const pos of blockerResult.damaged) {
+      this.sfx.play('blockerCrack');
+    }
+
+    this.updateGoalProgress();
+
+    // Animate clear
+    this.sfx.play('confetti');
+    await this.slotGrid.animateClear(result.cleared, result.score);
+
+    // Apply gravity and fill
+    const updatedGrid = this.match3.getGrid();
+    this.applyGravityToGrid(updatedGrid);
+    this.fillGridEmpty(updatedGrid);
+    this.match3.setGrid(updatedGrid);
+    await this.slotGrid.animateGravityDrop(updatedGrid);
+
+    // Resolve any cascades that form after gravity
+    await this.resolveCascades();
+
+    // Re-enable interaction
+    this.slotGrid.setInteractive(true);
+    this.startHintTimer();
+
+    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+
+    // Check if moves depleted
+    if (this.movesRemaining <= 0) {
+      await delay(500);
+      this.endMatchPhase();
+    } else {
+      this.checkForDeadBoard();
+    }
+  }
+
+  private placeBlockers(grid: (CellData | null)[][], def: import('@/models/Level').LevelDef): void {
+    const count = def.blockerCount ?? 0;
+    const type = def.blockerType ?? 'ice';
+    const health = type === 'ice' ? 1 : 2;
+
+    // Collect valid positions (avoid corners for better gameplay)
+    const positions: { r: number; c: number }[] = [];
+    for (let r = 0; r < GameConfig.rows; r++) {
+      for (let c = 0; c < GameConfig.cols; c++) {
+        // Avoid corners
+        const isCorner = (r === 0 || r === GameConfig.rows - 1) && (c === 0 || c === GameConfig.cols - 1);
+        if (!isCorner && grid[r][c]) {
+          positions.push({ r, c });
+        }
+      }
+    }
+
+    // Shuffle and pick
+    for (let i = positions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
+
+    const toPlace = Math.min(count, positions.length);
+    for (let i = 0; i < toPlace; i++) {
+      const { r, c } = positions[i];
+      const cell = grid[r][c];
+      if (cell) {
+        cell.isBlocker = true;
+        cell.blockerHealth = health;
+      }
+    }
+  }
+
   private endMatchPhase(): void {
     this.clearHintTimer();
     this.slotGrid.clearHint();
+    this.slotGrid.stopPowerUpGlow();
     this.slotGrid.setInteractive(false);
     this.fsm.transition('SCORING');
 
@@ -689,6 +862,7 @@ export class Game {
           goal.current = this.powerUpCount;
           break;
         case 'clear_blockers':
+          goal.current = this.blockersCleared;
           break;
       }
     }
@@ -734,10 +908,16 @@ export class Game {
     for (let c = 0; c < GameConfig.cols; c++) {
       let writeRow = GameConfig.rows - 1;
       for (let r = GameConfig.rows - 1; r >= 0; r--) {
-        if (grid[r][c]) {
+        const cell = grid[r][c];
+        if (cell?.isBlocker) {
+          // Blocker stays fixed — restart write pointer above it
+          writeRow = r - 1;
+          continue;
+        }
+        if (cell) {
           if (r !== writeRow) {
-            grid[writeRow][c] = grid[r][c];
-            grid[writeRow][c]!.row = writeRow;
+            grid[writeRow][c] = cell;
+            cell.row = writeRow;
             grid[r][c] = null;
           }
           writeRow--;

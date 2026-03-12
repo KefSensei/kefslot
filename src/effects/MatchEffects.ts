@@ -149,6 +149,67 @@ export class MatchEffects extends Container {
     gsap.to(flash, { alpha: 0, duration: 0.4, ease: 'power2.out', onComplete: () => flash.destroy() });
   }
 
+  /** Blast power-up activation: bright line sweep across row or column */
+  showBlastEffect(positions: { x: number; y: number }[], isRow: boolean): void {
+    if (positions.length === 0) return;
+    const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+    const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+
+    const line = new Graphics();
+    if (isRow) {
+      line.rect(-400, -3, 800, 6);
+    } else {
+      line.rect(-3, -350, 6, 700);
+    }
+    line.fill({ color: 0x00e5ff, alpha: 0.8 });
+    line.x = cx;
+    line.y = cy;
+    line.scale.set(0, 1);
+    this.addChild(line);
+
+    const tl = gsap.timeline();
+    tl.to(line.scale, { x: 1, duration: 0.25, ease: 'power3.out' }, 0);
+    tl.to(line, { alpha: 0, duration: 0.3, delay: 0.15, onComplete: () => line.destroy() }, 0);
+  }
+
+  /** Bomb power-up activation: expanding ring from center */
+  showBombEffect(x: number, y: number): void {
+    for (let i = 0; i < 3; i++) {
+      const ring = new Graphics();
+      ring.circle(0, 0, 30);
+      ring.stroke({ color: 0xff5722, width: 4, alpha: 0.8 });
+      ring.x = x;
+      ring.y = y;
+      ring.scale.set(0.2);
+      this.addChild(ring);
+
+      gsap.to(ring.scale, { x: 3, y: 3, duration: 0.4, delay: i * 0.08, ease: 'power2.out' });
+      gsap.to(ring, { alpha: 0, duration: 0.4, delay: i * 0.08 + 0.1, onComplete: () => ring.destroy() });
+    }
+    // Flash
+    const flash = new Graphics();
+    flash.circle(x, y, 60);
+    flash.fill({ color: 0xff5722, alpha: 0.4 });
+    this.addChild(flash);
+    gsap.to(flash, { alpha: 0, duration: 0.3, onComplete: () => flash.destroy() });
+  }
+
+  /** Rainbow power-up activation: all matching symbols pulse before clearing */
+  showRainbowEffect(positions: { x: number; y: number }[]): void {
+    for (const pos of positions) {
+      const star = new Graphics();
+      star.circle(0, 0, 15);
+      star.fill({ color: 0xffd700, alpha: 0.9 });
+      star.x = pos.x;
+      star.y = pos.y;
+      star.scale.set(0);
+      this.addChild(star);
+
+      gsap.to(star.scale, { x: 2.5, y: 2.5, duration: 0.3, ease: 'back.out' });
+      gsap.to(star, { alpha: 0, duration: 0.4, delay: 0.2, onComplete: () => star.destroy() });
+    }
+  }
+
   /** Draw a glowing win line through matched cell centers */
   drawWinLine(positions: { x: number; y: number }[], color: number): void {
     if (positions.length < 2) return;

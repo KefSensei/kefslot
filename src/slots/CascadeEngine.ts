@@ -78,8 +78,9 @@ export class CascadeEngine {
     return multipliers[Math.min(cascadeLevel, multipliers.length - 1)];
   }
 
-  // Check if two cells match (wilds match everything)
+  // Check if two cells match (wilds match everything, blockers never match)
   private symbolsMatch(a: CellData, b: CellData): boolean {
+    if (a.isBlocker || b.isBlocker) return false;
     if (a.symbol.isWild || b.symbol.isWild) return true;
     return a.symbol.id === b.symbol.id;
   }
