@@ -3,6 +3,8 @@ import menuBgLandscapeUrl from '@/assets/sprites/menu-bg-landscape.png';
 import menuBgPortraitUrl from '@/assets/sprites/menu-bg-portrait.png';
 import levelSelectBgLandscapeUrl from '@/assets/sprites/levelselect-bg-landscape.png';
 import levelSelectBgPortraitUrl from '@/assets/sprites/levelselect-bg-portrait.png';
+import gameBgLandscapeUrl from '@/assets/sprites/game-bg-landscape.png';
+import gameBgPortraitUrl from '@/assets/sprites/game-bg-portrait.png';
 import { GameConfig } from '@/config/GameConfig';
 import { getLevelConfig } from '@/config/LevelConfig';
 import { StateMachine, GameState } from '@/core/StateMachine';
@@ -50,7 +52,7 @@ export class Game {
   private goalDisplay!: Container;
 
   // Layout references for relayout
-  private gameBg!: Graphics;
+  private gameBg!: Sprite;
   private gameTopGrad!: Graphics;
   private gameAmbientGlow!: Graphics;
   private gameHeader!: Text;
@@ -59,6 +61,7 @@ export class Game {
   // Background textures
   private menuBgTextures!: { landscape: Texture; portrait: Texture };
   private levelSelectBgTextures!: { landscape: Texture; portrait: Texture };
+  private gameBgTextures!: { landscape: Texture; portrait: Texture };
 
   // Menu scene layout references
   private menuBg!: Sprite;
@@ -100,14 +103,17 @@ export class Game {
   }
 
   private async loadAssets(): Promise<void> {
-    const [menuL, menuP, lsL, lsP] = await Promise.all([
+    const [menuL, menuP, lsL, lsP, gameL, gameP] = await Promise.all([
       Assets.load<Texture>(menuBgLandscapeUrl),
       Assets.load<Texture>(menuBgPortraitUrl),
       Assets.load<Texture>(levelSelectBgLandscapeUrl),
       Assets.load<Texture>(levelSelectBgPortraitUrl),
+      Assets.load<Texture>(gameBgLandscapeUrl),
+      Assets.load<Texture>(gameBgPortraitUrl),
     ]);
     this.menuBgTextures = { landscape: menuL, portrait: menuP };
     this.levelSelectBgTextures = { landscape: lsL, portrait: lsP };
+    this.gameBgTextures = { landscape: gameL, portrait: gameP };
   }
 
   private buildMenuScene(): void {
@@ -195,7 +201,13 @@ export class Game {
 
     const playText = new Text({
       text: 'PLAY',
-      style: new TextStyle({ fontSize: 26, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'Segoe UI, sans-serif', letterSpacing: 6 }),
+      style: new TextStyle({
+        fontSize: 26,
+        fill: 0xffffff,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        letterSpacing: 6,
+      }),
     });
     playText.anchor.set(0.5);
     this.menuPlayBtn.addChild(playText);
@@ -231,33 +243,22 @@ export class Game {
     const h = GameConfig.activeHeight;
     const isPortrait = GameConfig.isPortrait;
 
-    // Gradient background (dark purple → near-black)
-    this.gameBg = new Graphics();
-    this.gameBg.rect(0, 0, w, h);
-    this.gameBg.fill({ color: 0x0d0520 });
+    // Background image (slot cabinet art)
+    this.gameBg = new Sprite(isPortrait ? this.gameBgTextures.portrait : this.gameBgTextures.landscape);
+    this.gameBg.width = w;
+    this.gameBg.height = h;
     this.gameScene.addChild(this.gameBg);
 
-    // Upper gradient overlay (lighter purple fade)
+    // Keep these for compatibility but make them invisible (art provides the atmosphere now)
     this.gameTopGrad = new Graphics();
-    this.gameTopGrad.rect(0, 0, w, 200);
-    this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
-    this.gameScene.addChild(this.gameTopGrad);
-
-    // Ambient glow behind slot machine
     this.gameAmbientGlow = new Graphics();
-    this.gameAmbientGlow.circle(w / 2, h / 2 - 20, 280);
-    this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
-    this.gameScene.addChild(this.gameAmbientGlow);
-
-    // Starfield
-    this.addStarfield(this.gameScene);
 
     // Header plate: "ROXY'S MAGIC REELS"
     this.gameHeader = new Text({
       text: "ROXY'S MAGIC REELS",
       style: new TextStyle({
         fontSize: 20,
-        fill: 0xF5D060,
+        fill: 0xf5d060,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
         letterSpacing: 4,
@@ -327,18 +328,10 @@ export class Game {
     const w = GameConfig.activeWidth;
     const h = GameConfig.activeHeight;
 
-    // Redraw backgrounds to fit active canvas
-    this.gameBg.clear();
-    this.gameBg.rect(0, 0, w, h);
-    this.gameBg.fill({ color: 0x0d0520 });
-
-    this.gameTopGrad.clear();
-    this.gameTopGrad.rect(0, 0, w, 200);
-    this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
-
-    this.gameAmbientGlow.clear();
-    this.gameAmbientGlow.circle(w / 2, h / 2 - 20, 280);
-    this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
+    // Swap game background texture for orientation
+    this.gameBg.texture = isPortrait ? this.gameBgTextures.portrait : this.gameBgTextures.landscape;
+    this.gameBg.width = w;
+    this.gameBg.height = h;
 
     // Header
     if (isPortrait) {
@@ -475,7 +468,7 @@ export class Game {
     this.powerUpCount = 0;
     this.blockersCleared = 0;
     this.collectCounts = {};
-    this.goals = def.goals.map(g => ({ ...g, current: 0 }));
+    this.goals = def.goals.map((g) => ({ ...g, current: 0 }));
 
     this.hud.setLevel(def.id);
     this.hud.setScore(0);
@@ -602,7 +595,7 @@ export class Game {
 
   private async resolveCascades(): Promise<void> {
     let cascadeLevel = 0;
-    let grid = this.match3.getGrid();
+    const grid = this.match3.getGrid();
     let matches = this.cascade.findMatches(grid);
 
     if (matches.length > 0) {
@@ -620,11 +613,12 @@ export class Game {
       // Score matches
       let roundScore = 0;
       for (const match of matches) {
-        const baseScore = match.cells.length >= 5
-          ? GameConfig.match5Score
-          : match.cells.length >= 4
-            ? GameConfig.match4Score
-            : GameConfig.match3Score;
+        const baseScore =
+          match.cells.length >= 5
+            ? GameConfig.match5Score
+            : match.cells.length >= 4
+              ? GameConfig.match4Score
+              : GameConfig.match3Score;
         const score = baseScore * multiplier;
         roundScore += score;
         this.totalScore += score;
@@ -651,7 +645,7 @@ export class Game {
       this.sfx.play('confetti');
 
       // Animate clearing with confetti and floating score
-      const allCells = matches.flatMap(m => m.cells);
+      const allCells = matches.flatMap((m) => m.cells);
       await this.slotGrid.animateClear(allCells, roundScore);
 
       // Remove from data
@@ -866,12 +860,12 @@ export class Game {
     // Show power-up activation effect
     const effects = this.slotGrid.getEffects();
     const clearedPositions = result.cleared
-      .map(p => this.slotGrid.getCellPosition(p.row, p.col))
+      .map((p) => this.slotGrid.getCellPosition(p.row, p.col))
       .filter((p): p is { x: number; y: number } => p !== null);
     const originPos = this.slotGrid.getCellPosition(row, col);
 
     if (powerUpType === 'blast' && originPos) {
-      const isRow = result.cleared.every(c => c.row === row);
+      const isRow = result.cleared.every((c) => c.row === row);
       effects.showBlastEffect(clearedPositions, isRow);
     } else if (powerUpType === 'bomb' && originPos) {
       effects.showBombEffect(originPos.x, originPos.y);
@@ -1009,14 +1003,12 @@ export class Game {
   }
 
   private checkLevelCompletion(): void {
-    const allGoalsMet = this.goals.every(g => g.current >= g.target);
+    const allGoalsMet = this.goals.every((g) => g.current >= g.target);
 
     if (allGoalsMet || this.spinsRemaining <= 0) {
       const passed = allGoalsMet;
       const def = this.currentLevelDef!;
-      const stars = passed
-        ? def.starThresholds.filter(t => this.totalScore >= t).length
-        : 0;
+      const stars = passed ? def.starThresholds.filter((t) => this.totalScore >= t).length : 0;
       const coinsEarned = passed ? 100 + stars * 50 : 0;
 
       if (passed) {
@@ -1090,11 +1082,21 @@ export class Game {
     const goalTexts = this.goals.map((g, i) => {
       let text = '';
       switch (g.type) {
-        case 'score': text = `Score: ${g.current}/${g.target}`; break;
-        case 'collect': text = `${g.symbolId}: ${g.current}/${g.target}`; break;
-        case 'cascades': text = `Cascades: ${g.current}/${g.target}`; break;
-        case 'power_ups': text = `Power-ups: ${g.current}/${g.target}`; break;
-        case 'clear_blockers': text = `Blockers: ${g.current}/${g.target}`; break;
+        case 'score':
+          text = `Score: ${g.current}/${g.target}`;
+          break;
+        case 'collect':
+          text = `${g.symbolId}: ${g.current}/${g.target}`;
+          break;
+        case 'cascades':
+          text = `Cascades: ${g.current}/${g.target}`;
+          break;
+        case 'power_ups':
+          text = `Power-ups: ${g.current}/${g.target}`;
+          break;
+        case 'clear_blockers':
+          text = `Blockers: ${g.current}/${g.target}`;
+          break;
       }
       const done = g.current >= g.target;
       const t = new Text({
@@ -1110,7 +1112,7 @@ export class Game {
       return t;
     });
 
-    goalTexts.forEach(t => this.goalDisplay.addChild(t));
+    goalTexts.forEach((t) => this.goalDisplay.addChild(t));
   }
 
   private applyGravityToGrid(grid: (CellData | null)[][]): void {
