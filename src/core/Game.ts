@@ -1,4 +1,6 @@
-import { Application, Container, Graphics, Text, TextStyle, FillGradient } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle, FillGradient, Sprite, Texture, Assets } from 'pixi.js';
+import menuBgLandscapeUrl from '@/assets/sprites/menu-bg-landscape.png';
+import menuBgPortraitUrl from '@/assets/sprites/menu-bg-portrait.png';
 import { GameConfig } from '@/config/GameConfig';
 import { getLevelConfig } from '@/config/LevelConfig';
 import { StateMachine, GameState } from '@/core/StateMachine';
@@ -53,7 +55,8 @@ export class Game {
   private _isPortrait: boolean | null = null; // null = not yet laid out
 
   // Menu scene layout references
-  private menuBg!: Graphics;
+  private menuBg!: Sprite;
+  private menuBgTextures!: { landscape: Texture; portrait: Texture };
   private menuGlow!: Graphics;
   private menuTitle!: Text;
   private menuSub!: Text;
@@ -77,7 +80,10 @@ export class Game {
     this.init();
   }
 
-  private init(): void {
+  private async init(): Promise<void> {
+    // Preload image assets
+    await this.loadAssets();
+
     this.buildMenuScene();
     this.buildLevelSelectScene();
     this.buildGameScene();
@@ -88,20 +94,29 @@ export class Game {
     this.showScene('menu');
   }
 
+  private async loadAssets(): Promise<void> {
+    const [landscapeTex, portraitTex] = await Promise.all([
+      Assets.load<Texture>(menuBgLandscapeUrl),
+      Assets.load<Texture>(menuBgPortraitUrl),
+    ]);
+    this.menuBgTextures = { landscape: landscapeTex, portrait: portraitTex };
+  }
+
   private buildMenuScene(): void {
     const w = GameConfig.activeWidth;
     const h = GameConfig.activeHeight;
 
-    // Gradient background
-    this.menuBg = new Graphics();
-    this.menuBg.rect(0, 0, w, h);
-    this.menuBg.fill({ color: 0x1a0a2e });
+    // Background image (switches between landscape/portrait textures)
+    const isPortrait = GameConfig.isPortrait;
+    this.menuBg = new Sprite(isPortrait ? this.menuBgTextures.portrait : this.menuBgTextures.landscape);
+    this.menuBg.width = w;
+    this.menuBg.height = h;
     this.menuScene.addChild(this.menuBg);
 
-    // Ambient glow behind center
+    // Soft dark vignette behind title/UI area for text readability
     this.menuGlow = new Graphics();
-    this.menuGlow.circle(w / 2, h * 0.5, 250);
-    this.menuGlow.fill({ color: 0x9b59b6, alpha: 0.1 });
+    this.menuGlow.ellipse(w / 2, h * 0.4, w * 0.45, h * 0.35);
+    this.menuGlow.fill({ color: 0x0a0018, alpha: 0.45 });
     this.menuScene.addChild(this.menuGlow);
 
     // Title
@@ -336,14 +351,14 @@ export class Game {
     this.levelIntro.relayout(w, h);
     this.levelComplete.relayout(w, h);
 
-    // Menu scene
-    this.menuBg.clear();
-    this.menuBg.rect(0, 0, w, h);
-    this.menuBg.fill({ color: 0x1a0a2e });
+    // Menu scene — swap background texture for orientation
+    this.menuBg.texture = isPortrait ? this.menuBgTextures.portrait : this.menuBgTextures.landscape;
+    this.menuBg.width = w;
+    this.menuBg.height = h;
 
     this.menuGlow.clear();
-    this.menuGlow.circle(w / 2, h * 0.5, 250);
-    this.menuGlow.fill({ color: 0x9b59b6, alpha: 0.1 });
+    this.menuGlow.ellipse(w / 2, h * 0.4, w * 0.45, h * 0.35);
+    this.menuGlow.fill({ color: 0x0a0018, alpha: 0.45 });
 
     this.menuTitle.x = w / 2;
     this.menuTitle.y = h * 0.22;
