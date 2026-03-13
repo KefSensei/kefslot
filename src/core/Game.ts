@@ -274,10 +274,14 @@ export class Game {
     this.hud = new HUD();
     this.hud.setMusicMuted(this.player.musicMuted);
     Howler.mute(this.player.musicMuted);
+    this.hud.setSfxMuted(this.sfx.muted);
     if (isPortrait) this.hud.setPortrait(true);
     this.hud.onMusicToggle = (muted) => {
       this.player.setMusicMuted(muted);
       Howler.mute(muted);
+    };
+    this.hud.onSfxToggle = (muted) => {
+      this.sfx.setMuted(muted);
     };
     this.gameScene.addChild(this.hud);
 

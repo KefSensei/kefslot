@@ -419,6 +419,23 @@ export class SlotGrid extends Container {
     // Apply mask so symbols don't show outside the grid frame
     this.applySpinMask();
 
+    // Generate per-column random speeds: left columns tend to be faster,
+    // right columns slower, with random variance — like a real slot machine.
+    const colSpeeds: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      // Base duration increases left-to-right: 0.25s to 0.45s
+      const base = 0.25 + (c / (cols - 1)) * 0.2;
+      // Random variance ±0.08s
+      const variance = (Math.random() - 0.5) * 0.16;
+      colSpeeds.push(Math.max(0.2, base + variance));
+    }
+
+    // Per-column stagger delay: each column starts slightly after the previous
+    const colDelays: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      colDelays.push(c * (0.08 + Math.random() * 0.06));
+    }
+
     // Phase 1: Scroll current symbols downward off-screen
     const scrollOut = gsap.timeline();
     for (let c = 0; c < cols; c++) {
@@ -428,9 +445,9 @@ export class SlotGrid extends Container {
           scrollOut.to(sprite, {
             y: sprite.y + 500 + r * 40,
             alpha: 0,
-            duration: 0.35,
+            duration: colSpeeds[c],
             ease: 'power2.in',
-          }, c * 0.1 + r * 0.02);
+          }, colDelays[c] + r * 0.02);
         }
       }
     }
@@ -439,25 +456,33 @@ export class SlotGrid extends Container {
     // Phase 2: Generate new grid data and render
     generateNewGrid();
 
-    // Phase 3: New symbols enter from above and scroll into place
+    // Phase 3: New symbols enter from above and scroll into place.
+    // Per-column landing delay — left columns land first, right last, with variance.
+    const landDelays: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      const base = c * 0.18;
+      const variance = (Math.random() - 0.3) * 0.1;
+      landDelays.push(Math.max(0, base + variance));
+    }
+    const landDurations: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      landDurations.push(0.4 + Math.random() * 0.15);
+    }
+
     const scrollIn = gsap.timeline();
     for (let c = 0; c < cols; c++) {
       for (let r = 0; r < rows; r++) {
         const sprite = this.cells[r]?.[c];
         if (sprite) {
           const targetY = sprite.y;
-          // Start above the grid, staggered per column
           sprite.y = targetY - 600 - r * 50;
           sprite.alpha = 1;
 
-          const colDelay = c * 0.2;
-          const rowDelay = r * 0.04;
-
           scrollIn.to(sprite, {
             y: targetY,
-            duration: 0.5,
+            duration: landDurations[c],
             ease: 'bounce.out',
-          }, colDelay + rowDelay);
+          }, landDelays[c] + r * 0.04);
         }
       }
     }

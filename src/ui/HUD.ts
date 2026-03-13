@@ -12,7 +12,9 @@ export class HUD extends Container {
   private messageTimeout: ReturnType<typeof setTimeout> | null = null;
   private movesGlow: Graphics;
   private musicBtnIcon: Graphics;
+  private sfxBtnIcon: Graphics;
   private _musicMuted = false;
+  private _sfxMuted = false;
 
   // Layout references for portrait repositioning
   private bg: Graphics;
@@ -25,8 +27,10 @@ export class HUD extends Container {
   private coinIcon: Graphics;
   private coinC: Text;
   private musicBtn: Container;
+  private sfxBtn: Container;
 
   onMusicToggle: ((muted: boolean) => void) | null = null;
+  onSfxToggle: ((muted: boolean) => void) | null = null;
 
   constructor() {
     super();
@@ -161,6 +165,25 @@ export class HUD extends Container {
     });
     this.addChild(this.musicBtn);
 
+    // SFX mute button (next to music button)
+    this.sfxBtn = new Container();
+    this.sfxBtn.x = GameConfig.width - 70;
+    this.sfxBtn.y = 30;
+    this.sfxBtn.eventMode = 'static';
+    this.sfxBtn.cursor = 'pointer';
+    this.sfxBtn.hitArea = { contains: (x: number, y: number) => x >= -16 && x <= 16 && y >= -16 && y <= 16 };
+
+    this.sfxBtnIcon = new Graphics();
+    this.sfxBtn.addChild(this.sfxBtnIcon);
+    this.drawSfxIcon(false);
+
+    this.sfxBtn.on('pointerdown', () => {
+      this._sfxMuted = !this._sfxMuted;
+      this.drawSfxIcon(this._sfxMuted);
+      this.onSfxToggle?.(this._sfxMuted);
+    });
+    this.addChild(this.sfxBtn);
+
     // Message (centered on slot grid)
     this.messageText = new Text({ text: '', style: new TextStyle({
       fontSize: 20,
@@ -220,6 +243,7 @@ export class HUD extends Container {
       this.coinsText.visible = false;
 
       this.musicBtn.x = w - 30;
+      this.sfxBtn.x = w - 70;
     } else {
       // Standard landscape layout
       this.lvlLabel.x = 20;
@@ -243,6 +267,7 @@ export class HUD extends Container {
       this.coinsText.visible = true;
 
       this.musicBtn.x = GameConfig.width - 30;
+      this.sfxBtn.x = GameConfig.width - 70;
     }
 
     // Message always centered on active canvas
@@ -305,6 +330,45 @@ export class HUD extends Container {
   setMusicMuted(muted: boolean): void {
     this._musicMuted = muted;
     this.drawMusicIcon(muted);
+  }
+
+  setSfxMuted(muted: boolean): void {
+    this._sfxMuted = muted;
+    this.drawSfxIcon(muted);
+  }
+
+  private drawSfxIcon(muted: boolean): void {
+    const g = this.sfxBtnIcon;
+    g.clear();
+
+    // FX text icon
+    const color = muted ? 0x666666 : 0xb0a0c0;
+    // Draw "FX" as small graphics lines
+    // F shape
+    g.moveTo(-8, -6);
+    g.lineTo(-8, 6);
+    g.stroke({ color, width: 2 });
+    g.moveTo(-8, -6);
+    g.lineTo(-2, -6);
+    g.stroke({ color, width: 2 });
+    g.moveTo(-8, 0);
+    g.lineTo(-3, 0);
+    g.stroke({ color, width: 2 });
+
+    // X shape
+    g.moveTo(1, -6);
+    g.lineTo(9, 6);
+    g.stroke({ color, width: 2 });
+    g.moveTo(9, -6);
+    g.lineTo(1, 6);
+    g.stroke({ color, width: 2 });
+
+    if (muted) {
+      // Red slash through
+      g.moveTo(-10, 8);
+      g.lineTo(11, -8);
+      g.stroke({ color: 0xe74c3c, width: 2 });
+    }
   }
 
   private drawMusicIcon(muted: boolean): void {

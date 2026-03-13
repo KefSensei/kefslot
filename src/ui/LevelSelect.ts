@@ -4,65 +4,111 @@ import { LevelConfigs } from '@/config/LevelConfig';
 import { PlayerState } from '@/models/PlayerState';
 
 /**
- * Path waypoints for level nodes — normalized [0..1] coordinates.
- * These trace the golden winding path visible in the world map art.
- * The path snakes from upper-left meadow down to lower caverns.
+ * Road-center waypoints traced from the golden road in the world-map art.
+ * Each entry is the road's center at that level's progress point.
+ * Odd levels (1,3,5…) are offset to the LEFT of the road direction.
+ * Even levels (2,4,6…) are offset to the RIGHT.
+ * Boss levels (10, 20) sit ON the road center.
  */
-const PATH_PORTRAIT: [number, number][] = [
-  // World 1: Enchanted Meadow (upper meadow area, path winds right then left)
-  [0.28, 0.08], // L1  — top-left meadow
-  [0.52, 0.10], // L2  — slight right
-  [0.72, 0.13], // L3  — right side
-  [0.68, 0.19], // L4  — curving down-left
-  [0.45, 0.22], // L5  — center
-  [0.25, 0.26], // L6  — left side
-  [0.30, 0.32], // L7  — path curves right
-  [0.52, 0.35], // L8  — center-right
-  [0.70, 0.38], // L9  — right
-  [0.55, 0.42], // L10 — center (boss, slightly larger later)
 
-  // World 2: Crystal Caverns (lower rocky area, path descends into caves)
-  [0.38, 0.50], // L11 — entering cavern zone
-  [0.22, 0.54], // L12 — left cave wall
-  [0.40, 0.58], // L13 — center path
-  [0.62, 0.55], // L14 — right side
-  [0.72, 0.60], // L15 — right cave
-  [0.58, 0.65], // L16 — curving left
-  [0.35, 0.68], // L17 — left
-  [0.25, 0.73], // L18 — deeper left
-  [0.45, 0.78], // L19 — center-right
-  [0.50, 0.84], // L20 — boss, deep in cavern
+/** Perpendicular offset (normalized) from road center to node edge */
+const ROAD_OFFSET = 0.045;
+
+/**
+ * Given a list of road-center waypoints, offset odd levels left and even
+ * levels right (relative to the road's forward direction).
+ * Boss levels (index 9 and 19 → ids 10 and 20) stay centered on the road.
+ */
+function offsetFromRoad(
+  centers: [number, number][],
+): [number, number][] {
+  return centers.map(([cx, cy], i) => {
+    const levelId = i + 1;
+    const isBoss = levelId === 10 || levelId === 20;
+    if (isBoss) return [cx, cy];
+
+    // Compute road direction vector from prev→next (or neighbors)
+    const prev = i > 0 ? centers[i - 1] : centers[i];
+    const next = i < centers.length - 1 ? centers[i + 1] : centers[i];
+    const dx = next[0] - prev[0];
+    const dy = next[1] - prev[1];
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    // Perpendicular: rotate direction 90° left = (-dy, dx)
+    const px = -dy / len;
+    const py = dx / len;
+
+    // Odd levels → left side (negative perp), even → right side (positive perp)
+    const sign = levelId % 2 === 1 ? -1 : 1;
+    return [cx + px * ROAD_OFFSET * sign, cy + py * ROAD_OFFSET * sign] as [number, number];
+  });
+}
+
+// Road centerline traced from the portrait world-map art (500×900 canvas).
+// The golden road starts upper-left, sweeps right across the meadow,
+// S-curves down through a stone bridge into the crystal caverns.
+const ROAD_CENTER_PORTRAIT: [number, number][] = [
+  // World 1: Enchanted Meadow — road sweeps right then loops back left
+  [0.33, 0.09], // L1  — road start, upper-left meadow
+  [0.44, 0.11], // L2  — road heading right
+  [0.56, 0.13], // L3  — continuing right
+  [0.63, 0.17], // L4  — road curving down-right
+  [0.55, 0.22], // L5  — road curving back left
+  [0.44, 0.26], // L6  — center of road sweep left
+  [0.37, 0.31], // L7  — road bends, heading down-right
+  [0.42, 0.35], // L8  — on the road heading right
+  [0.50, 0.38], // L9  — approaching the bridge
+  [0.47, 0.42], // L10 — BOSS: on the stone bridge
+
+  // World 2: Crystal Caverns — road through bridge into winding caves
+  [0.47, 0.49], // L11 — just past bridge, entering cavern
+  [0.54, 0.53], // L12 — road in upper cave (curves right)
+  [0.56, 0.57], // L13 — road heading right
+  [0.58, 0.61], // L14 — right side of cave road
+  [0.58, 0.65], // L15 — near second bridge
+  [0.54, 0.69], // L16 — road curves back left
+  [0.50, 0.73], // L17 — past second bridge
+  [0.52, 0.78], // L18 — center of lower cave road
+  [0.52, 0.83], // L19 — heading toward cave entrance
+  [0.48, 0.88], // L20 — BOSS: deep in cavern
 ];
 
-const PATH_LANDSCAPE: [number, number][] = [
-  // World 1: same path but adjusted for wider/shorter aspect ratio
-  [0.20, 0.07], // L1
-  [0.38, 0.09], // L2
-  [0.55, 0.12], // L3
-  [0.58, 0.20], // L4
-  [0.42, 0.24], // L5
-  [0.25, 0.28], // L6
-  [0.28, 0.36], // L7
-  [0.45, 0.38], // L8
-  [0.60, 0.42], // L9
-  [0.48, 0.48], // L10
+const PATH_PORTRAIT = offsetFromRoad(ROAD_CENTER_PORTRAIT);
 
-  // World 2
-  [0.35, 0.55], // L11
-  [0.22, 0.60], // L12
-  [0.38, 0.64], // L13
-  [0.55, 0.60], // L14
-  [0.65, 0.66], // L15
-  [0.55, 0.72], // L16
-  [0.38, 0.75], // L17
-  [0.25, 0.80], // L18
-  [0.42, 0.85], // L19
-  [0.48, 0.92], // L20
+// Road centerline for landscape (800×700 canvas) — tapped via debug overlay.
+const ROAD_CENTER_LANDSCAPE: [number, number][] = [
+  [0.49, 0.04], // L1
+  [0.48, 0.09], // L2
+  [0.60, 0.08], // L3
+  [0.58, 0.13], // L4
+  [0.69, 0.14], // L5
+  [0.59, 0.19], // L6
+  [0.65, 0.24], // L7
+  [0.51, 0.21], // L8
+  [0.58, 0.29], // L9
+  [0.45, 0.24], // L10
+  [0.47, 0.32], // L11
+  [0.33, 0.28], // L12
+  [0.41, 0.33], // L13
+  [0.29, 0.33], // L14
+  [0.37, 0.38], // L15
+  [0.27, 0.42], // L16
+  [0.43, 0.44], // L17
+  [0.37, 0.49], // L18
+  [0.49, 0.46], // L19
+  [0.45, 0.52], // L20
 ];
+
+const PATH_LANDSCAPE = offsetFromRoad(ROAD_CENTER_LANDSCAPE);
+
+/** Check URL for ?debug=1 to enable coordinate picker mode */
+const DEBUG_MODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 
 export class LevelSelect extends Container {
   onLevelChosen: ((levelId: number) => void) | null = null;
   private bgTextures: { landscape: Texture; portrait: Texture } | null = null;
+  private debugPoints: [number, number][] = [];
+  private debugLayer: Container | null = null;
 
   constructor(private player: PlayerState) {
     super();
@@ -115,11 +161,11 @@ export class LevelSelect extends Container {
     const worldLabelPos: { name: string; x: number; y: number }[] = isPortrait
       ? [
           { name: 'Enchanted Meadow', x: 0.50, y: 0.04 },
-          { name: 'Crystal Caverns', x: 0.50, y: 0.47 },
+          { name: 'Crystal Caverns', x: 0.72, y: 0.47 },
         ]
       : [
-          { name: 'Enchanted Meadow', x: 0.50, y: 0.02 },
-          { name: 'Crystal Caverns', x: 0.50, y: 0.52 },
+          { name: 'Enchanted Meadow', x: 0.50, y: 0.00 },
+          { name: 'Crystal Caverns', x: 0.18, y: 0.28 },
         ];
 
     for (const lbl of worldLabelPos) {
@@ -140,9 +186,9 @@ export class LevelSelect extends Container {
       this.addChild(label);
     }
 
-    // Place level nodes along the path
-    const nodeSize = isPortrait ? 48 : 52;
-    const bossSize = isPortrait ? 56 : 60;
+    // Place level nodes along the path — kept compact so they hug the road
+    const nodeSize = isPortrait ? 40 : 44;
+    const bossSize = isPortrait ? 50 : 54;
 
     for (let i = 0; i < LevelConfigs.length && i < path.length; i++) {
       const level = LevelConfigs[i];
@@ -213,6 +259,101 @@ export class LevelSelect extends Container {
 
       this.addChild(btn);
     }
+
+    // Debug overlay — click anywhere to log normalized coordinates
+    if (DEBUG_MODE) {
+      this.buildDebugOverlay(w, h);
+    }
+  }
+
+  private buildDebugOverlay(w: number, h: number): void {
+    // Transparent hit area covering the whole map
+    const hitArea = new Graphics();
+    hitArea.rect(0, 0, w, h);
+    hitArea.fill({ color: 0x000000, alpha: 0.001 }); // nearly invisible
+    hitArea.eventMode = 'static';
+    hitArea.cursor = 'crosshair';
+    this.addChild(hitArea);
+
+    // Layer for debug markers
+    this.debugLayer = new Container();
+    this.addChild(this.debugLayer);
+
+    // Info text at top
+    const info = new Text({
+      text: `🔧 DEBUG MODE — tap road to place points (${GameConfig.isPortrait ? 'portrait' : 'landscape'})`,
+      style: new TextStyle({ fontSize: 12, fill: 0x00ff00, fontFamily: 'monospace' }),
+    });
+    info.x = 10;
+    info.y = 10;
+    this.debugLayer.addChild(info);
+
+    // Counter text
+    const counter = new Text({
+      text: `Points: ${this.debugPoints.length}/20`,
+      style: new TextStyle({ fontSize: 12, fill: 0x00ff00, fontFamily: 'monospace' }),
+    });
+    counter.x = 10;
+    counter.y = 26;
+    this.debugLayer.addChild(counter);
+
+    hitArea.on('pointerdown', (e) => {
+      const localPos = e.getLocalPosition(this);
+      const nx = Math.round((localPos.x / w) * 100) / 100;
+      const ny = Math.round((localPos.y / h) * 100) / 100;
+
+      this.debugPoints.push([nx, ny]);
+      const idx = this.debugPoints.length;
+
+      // Draw marker dot
+      const dot = new Graphics();
+      dot.circle(0, 0, 5);
+      dot.fill({ color: 0x00ff00 });
+      dot.stroke({ color: 0x000000, width: 1 });
+      dot.x = localPos.x;
+      dot.y = localPos.y;
+      this.debugLayer!.addChild(dot);
+
+      // Label
+      const label = new Text({
+        text: String(idx),
+        style: new TextStyle({ fontSize: 10, fill: 0x00ff00, fontFamily: 'monospace' }),
+      });
+      label.anchor.set(0.5);
+      label.x = localPos.x;
+      label.y = localPos.y - 12;
+      this.debugLayer!.addChild(label);
+
+      // Update counter
+      counter.text = `Points: ${this.debugPoints.length}/20`;
+
+      // Log to console
+      console.log(`[DEBUG] Point ${idx}: [${nx}, ${ny}]`);
+
+      // When we have 20 points, dump the full array
+      if (this.debugPoints.length === 20) {
+        const orientation = GameConfig.isPortrait ? 'PORTRAIT' : 'LANDSCAPE';
+        const arr = this.debugPoints
+          .map(([x, y], i) => `  [${x}, ${y}], // L${i + 1}`)
+          .join('\n');
+        console.log(`\n=== ROAD_CENTER_${orientation} ===\n[\n${arr}\n]`);
+      }
+    });
+
+    // Undo last point on right-click or double-tap
+    hitArea.on('rightclick', (e) => {
+      e.preventDefault?.();
+      if (this.debugPoints.length > 0) {
+        this.debugPoints.pop();
+        // Remove last 2 children (dot + label)
+        if (this.debugLayer!.children.length > 2) {
+          this.debugLayer!.removeChildAt(this.debugLayer!.children.length - 1);
+          this.debugLayer!.removeChildAt(this.debugLayer!.children.length - 1);
+        }
+        counter.text = `Points: ${this.debugPoints.length}/20`;
+        console.log(`[DEBUG] Undo — ${this.debugPoints.length} points remaining`);
+      }
+    });
   }
 
   /** Draw a dotted path connecting level nodes */
