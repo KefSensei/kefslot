@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "cd /Users/eb/Documents/Projects/KefSlot && npx tsc --noEmit --pretty 2>&1 | tail -20"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "case \"$CLAUDE_FILE_PATHS\" in *package-lock*|*dist/*|*node_modules/*) echo 'BLOCK: Protected file — edit manually' >&2; exit 2;; esac"
+      }
+    ]
+  }
+}

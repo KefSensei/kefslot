@@ -16,12 +16,30 @@ A hybrid **Slot + Match-3** browser game built with PixiJS 8, TypeScript, GSAP, 
 ## Dev Commands
 
 ```bash
-npm run dev       # Vite dev server (default port 3000)
-npm run build     # tsc + vite build → dist/
-npm run preview   # Preview production build
+npm run dev          # Vite dev server (default port 3000)
+npm run build        # tsc + vite build → dist/
+npm run preview      # Preview production build
+npm run lint         # ESLint check
+npm run lint:fix     # ESLint auto-fix
+npm run format       # Prettier format all src/
+npm run format:check # Prettier check (CI)
 ```
 
 The `.claude/launch.json` runs dev on port **3005**. Note: `preview_start` has an EPERM bug — use `Bash` to run `cd /Users/eb/Documents/Projects/KefSlot && node node_modules/.bin/vite --port 3005` in background instead.
+
+## Tooling
+
+- **ESLint** — TypeScript ESLint + Prettier compat (`eslint.config.js`)
+- **Prettier** — Single quotes, 120 col, trailing commas (`.prettierrc`)
+- **Husky** — Pre-commit hook runs lint-staged (ESLint fix + Prettier)
+- **CI** — GitHub Actions: lint → type-check → build → bundle size (`.github/workflows/ci.yml`)
+
+## Claude Code Automations
+
+- **Hooks** — PostToolUse: auto type-check on Edit/Write. PreToolUse: block edits to `package-lock.json`, `dist/`, `node_modules/`.
+- **Skills** — `/build` (type-check + build), `/test-setup` (scaffold vitest), `/art-asset` (AI art pipeline)
+- **Subagent** — `game-reviewer` (performance, memory leaks, PixiJS gotchas)
+- **MCP** — `context7` for live PixiJS/GSAP/Howler docs lookup
 
 ## Architecture
 
@@ -51,9 +69,9 @@ src/
 ├── effects/
 │   └── MatchEffects.ts     # Confetti particles, floating "+score" text, cascade burst
 ├── ui/
-│   ├── HUD.ts              # Top bar: level, score, moves, multiplier, coins, music mute toggle
+│   ├── HUD.ts              # Top bar: level, score, moves, multiplier, coins, music + SFX mute toggles
 │   ├── SpinButton.ts       # SPIN / MOVES:N / DONE button
-│   ├── LevelSelect.ts      # 5-column level grid with world headers
+│   ├── LevelSelect.ts      # Path-based level nodes on world map background
 │   └── LevelComplete.ts    # Win/lose overlay with stars
 └── utils/
     └── MathUtils.ts        # weightedRandom, shuffle, clamp, lerp, delay
@@ -116,7 +134,8 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 
 ### Working
 - Menu → Level Select → Game flow
-- Slot-style reel drop animation (per-column bounce)
+- Slot-style reel drop animation with per-column random speeds (staggered left-to-right)
+- Symbol clipping mask — symbols masked to slot frame during spin animations
 - Drag-to-swap mechanic
 - Match detection (3/4/5 horizontal & vertical)
 - Cascade resolution with Fibonacci multipliers
@@ -130,13 +149,14 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 - Player progress persistence (localStorage)
 - 20 levels designed and configured
 - Music system (Howler.js, 10-stem progressive layering) with mute toggle
-- SFX system (Web Audio API, 18 procedural sounds) — matches, swaps, spins, UI feedback
-- Level select grouped by world with styled headers
+- SFX system (Web Audio API, 18 procedural sounds) with independent mute toggle
+- Level select with path-based nodes on AI-generated world map background
+- AI-generated menu background art (landscape + portrait variants)
 - Spin button available during MATCH3_PHASE (re-spin escape hatch)
 - Dead board detection — auto-prompts player when no valid swaps remain
+- Portrait/landscape responsive layout with orientation-aware backgrounds
 
 ### Not Yet Implemented
-- SFX mute button (separate from music mute)
 - Blocker tiles (ice/stone) — config exists, logic TODO
 - Power-up activation animations (logic works, visuals minimal)
 - Roxy character reactions during gameplay
@@ -144,8 +164,7 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 - Screen shake on big wins
 - Mobile touch optimization
 - Tutorial/guided prompts for levels 1-3
-- Final art (currently placeholder geometric shapes)
-- Symbol clipping to slot frame (symbols visible outside frame during animations)
+- Final art for symbols (currently placeholder geometric shapes)
 
 ## Scoring Reference
 
@@ -157,6 +176,6 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 
 Cascade multipliers: 1x → 2x → 3x → 5x → 8x → 13x → 21x
 
-## No Tests
+## Testing
 
-No test framework or test files exist yet. Would need vitest or similar.
+No test framework installed yet. Use `/test-setup` skill to scaffold vitest.
