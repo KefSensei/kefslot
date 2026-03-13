@@ -267,7 +267,7 @@ export class Game {
     });
     this.gameHeader.anchor.set(0.5);
     this.gameHeader.x = w / 2;
-    this.gameHeader.y = 78;
+    this.gameHeader.y = 45;
     this.gameHeader.visible = !isPortrait;
     this.gameScene.addChild(this.gameHeader);
 
@@ -286,26 +286,27 @@ export class Game {
     };
     this.gameScene.addChild(this.hud);
 
-    // Slot Grid
+    // Slot Grid — position to match cabinet screen area
+    const gridCenter = isPortrait ? GameConfig.gridCenterPortrait : GameConfig.gridCenterLandscape;
     this.slotGrid = new SlotGrid();
-    this.slotGrid.x = w / 2;
-    this.slotGrid.y = isPortrait ? h / 2 - 60 : h / 2 - 20;
+    this.slotGrid.x = gridCenter.x;
+    this.slotGrid.y = gridCenter.y;
     this.slotGrid.onSwapAttempt = (r1, c1, r2, c2) => this.handleSwap(r1, c1, r2, c2);
     this.slotGrid.onPowerUpTap = (r, c) => this.handlePowerUpActivation(r, c);
     this.gameScene.addChild(this.slotGrid);
 
-    // Spin Button
+    // Spin Button — sits on the wooden shelf below the screen
     this.spinButton = new SpinButton();
     this.spinButton.x = w / 2;
-    this.spinButton.y = isPortrait ? h - 55 : h - 45;
+    this.spinButton.y = isPortrait ? h * 0.82 : h * 0.78;
     if (isPortrait) this.spinButton.setPortrait(true);
     this.spinButton.onSpin = () => this.handleSpin();
     this.gameScene.addChild(this.spinButton);
 
-    // Goal display
+    // Goal display — just above spin button
     this.goalDisplay = new Container();
     this.goalDisplay.x = w / 2;
-    this.goalDisplay.y = isPortrait ? h - 110 : h - 90;
+    this.goalDisplay.y = isPortrait ? h * 0.76 : h * 0.72;
     this.gameScene.addChild(this.goalDisplay);
 
     // Level Intro overlay
@@ -339,21 +340,24 @@ export class Game {
     } else {
       this.gameHeader.visible = true;
       this.gameHeader.x = w / 2;
-      this.gameHeader.y = 78;
+      this.gameHeader.y = 45;
     }
 
-    // Grid — center in the available space
-    this.slotGrid.x = w / 2;
-    this.slotGrid.y = isPortrait ? h / 2 - 60 : h / 2 - 20;
+    // Grid — position to match cabinet screen area
+    const gridCenter = isPortrait ? GameConfig.gridCenterPortrait : GameConfig.gridCenterLandscape;
+    this.slotGrid.x = gridCenter.x;
+    this.slotGrid.y = gridCenter.y;
+    // Re-render grid with new cell size
+    this.slotGrid.renderGrid();
 
-    // Spin button
+    // Spin button — sits on the wooden shelf
     this.spinButton.x = w / 2;
-    this.spinButton.y = isPortrait ? h - 55 : h - 45;
+    this.spinButton.y = isPortrait ? h * 0.82 : h * 0.78;
     this.spinButton.setPortrait(isPortrait);
 
-    // Goal display
+    // Goal display — just above spin button
     this.goalDisplay.x = w / 2;
-    this.goalDisplay.y = isPortrait ? h - 110 : h - 90;
+    this.goalDisplay.y = isPortrait ? h * 0.76 : h * 0.72;
 
     // HUD
     this.hud.setPortrait(isPortrait);

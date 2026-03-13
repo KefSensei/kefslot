@@ -20,7 +20,7 @@ async function boot() {
   }
 
   // Remove any leftover canvases
-  document.querySelectorAll('canvas').forEach(c => c.remove());
+  document.querySelectorAll('canvas').forEach((c) => c.remove());
 
   const app = new Application();
   window.__kefslot_app = app;
@@ -56,9 +56,11 @@ async function boot() {
     if (isPortrait) {
       GameConfig.activeWidth = GameConfig.portraitWidth;
       GameConfig.activeHeight = GameConfig.portraitHeight;
+      GameConfig.cellSize = GameConfig.cellSizePortrait;
     } else {
       GameConfig.activeWidth = GameConfig.width;
       GameConfig.activeHeight = GameConfig.height;
+      GameConfig.cellSize = GameConfig.cellSizeLandscape;
     }
 
     const activeW = GameConfig.activeWidth;
