@@ -1,6 +1,8 @@
 import { Application, Container, Graphics, Text, TextStyle, FillGradient, Sprite, Texture, Assets } from 'pixi.js';
 import menuBgLandscapeUrl from '@/assets/sprites/menu-bg-landscape.png';
 import menuBgPortraitUrl from '@/assets/sprites/menu-bg-portrait.png';
+import levelSelectBgLandscapeUrl from '@/assets/sprites/levelselect-bg-landscape.png';
+import levelSelectBgPortraitUrl from '@/assets/sprites/levelselect-bg-portrait.png';
 import { GameConfig } from '@/config/GameConfig';
 import { getLevelConfig } from '@/config/LevelConfig';
 import { StateMachine, GameState } from '@/core/StateMachine';
@@ -54,9 +56,12 @@ export class Game {
   private gameHeader!: Text;
   private _isPortrait: boolean | null = null; // null = not yet laid out
 
+  // Background textures
+  private menuBgTextures!: { landscape: Texture; portrait: Texture };
+  private levelSelectBgTextures!: { landscape: Texture; portrait: Texture };
+
   // Menu scene layout references
   private menuBg!: Sprite;
-  private menuBgTextures!: { landscape: Texture; portrait: Texture };
   private menuGlow!: Graphics;
   private menuTitle!: Text;
   private menuSub!: Text;
@@ -95,11 +100,14 @@ export class Game {
   }
 
   private async loadAssets(): Promise<void> {
-    const [landscapeTex, portraitTex] = await Promise.all([
+    const [menuL, menuP, lsL, lsP] = await Promise.all([
       Assets.load<Texture>(menuBgLandscapeUrl),
       Assets.load<Texture>(menuBgPortraitUrl),
+      Assets.load<Texture>(levelSelectBgLandscapeUrl),
+      Assets.load<Texture>(levelSelectBgPortraitUrl),
     ]);
-    this.menuBgTextures = { landscape: landscapeTex, portrait: portraitTex };
+    this.menuBgTextures = { landscape: menuL, portrait: menuP };
+    this.levelSelectBgTextures = { landscape: lsL, portrait: lsP };
   }
 
   private buildMenuScene(): void {
@@ -209,6 +217,7 @@ export class Game {
 
   private buildLevelSelectScene(): void {
     this.levelSelectScene = new LevelSelect(this.player);
+    this.levelSelectScene.setBgTextures(this.levelSelectBgTextures);
     this.levelSelectScene.visible = false;
     this.levelSelectScene.onLevelChosen = (levelId) => {
       this.sfx.play('buttonPress');

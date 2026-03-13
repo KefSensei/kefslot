@@ -1,13 +1,21 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Container, Graphics, Text, TextStyle, Sprite, Texture } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { LevelConfigs } from '@/config/LevelConfig';
 import { PlayerState } from '@/models/PlayerState';
 
 export class LevelSelect extends Container {
   onLevelChosen: ((levelId: number) => void) | null = null;
+  private bgTextures: { landscape: Texture; portrait: Texture } | null = null;
 
   constructor(private player: PlayerState) {
     super();
+    this.build();
+  }
+
+  /** Set background textures (call before first build or refresh) */
+  setBgTextures(textures: { landscape: Texture; portrait: Texture }): void {
+    this.bgTextures = textures;
+    this.removeChildren();
     this.build();
   }
 
@@ -17,11 +25,28 @@ export class LevelSelect extends Container {
   }
 
   private build(): void {
-    // Background
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.activeWidth, GameConfig.activeHeight);
-    bg.fill({ color: 0x1a0a2e });
-    this.addChild(bg);
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+    const isPortrait = GameConfig.isPortrait;
+
+    // Background — use art if available, fallback to flat color
+    if (this.bgTextures) {
+      const bg = new Sprite(isPortrait ? this.bgTextures.portrait : this.bgTextures.landscape);
+      bg.width = w;
+      bg.height = h;
+      this.addChild(bg);
+
+      // Dark overlay for button readability
+      const overlay = new Graphics();
+      overlay.rect(0, 0, w, h);
+      overlay.fill({ color: 0x0a0018, alpha: 0.35 });
+      this.addChild(overlay);
+    } else {
+      const bg = new Graphics();
+      bg.rect(0, 0, w, h);
+      bg.fill({ color: 0x1a0a2e });
+      this.addChild(bg);
+    }
 
     // Title
     const title = new Text({
@@ -31,11 +56,11 @@ export class LevelSelect extends Container {
         fill: 0xf1c40f,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
-        dropShadow: { color: 0x000000, distance: 2, alpha: 0.5 },
+        dropShadow: { color: 0x000000, distance: 2, alpha: 0.8 },
       }),
     });
     title.anchor.set(0.5, 0);
-    title.x = GameConfig.activeWidth / 2;
+    title.x = w / 2;
     title.y = 16;
     this.addChild(title);
 
@@ -51,11 +76,11 @@ export class LevelSelect extends Container {
     const btnSize = 72;
     const gap = 14;
     const gridWidth = cols * (btnSize + gap) - gap;
-    const startX = (GameConfig.activeWidth - gridWidth) / 2;
+    const startX = (w - gridWidth) / 2;
     let cursorY = 62; // vertical cursor for layout
 
     for (const [worldId, levels] of worlds) {
-      // World header
+      // World header with shadow for readability over background art
       const worldLabel = new Text({
         text: `World ${worldId}: ${worldNames[worldId] ?? ''}`,
         style: new TextStyle({
@@ -64,6 +89,7 @@ export class LevelSelect extends Container {
           fontWeight: 'bold',
           fontFamily: 'Segoe UI, sans-serif',
           letterSpacing: 2,
+          dropShadow: { color: 0x000000, distance: 1, alpha: 0.8 },
         }),
       });
       worldLabel.x = startX;
@@ -74,7 +100,7 @@ export class LevelSelect extends Container {
       const divider = new Graphics();
       divider.moveTo(startX, cursorY + 24);
       divider.lineTo(startX + gridWidth, cursorY + 24);
-      divider.stroke({ color: 0xF5D060, width: 1, alpha: 0.25 });
+      divider.stroke({ color: 0xF5D060, width: 1, alpha: 0.3 });
       this.addChild(divider);
 
       cursorY += 32; // space after header
@@ -94,14 +120,14 @@ export class LevelSelect extends Container {
         btn.x = x;
         btn.y = y;
 
-        // Button background
+        // Button background — semi-transparent so map shows through
         const btnBg = new Graphics();
         btnBg.roundRect(0, 0, btnSize, btnSize, 10);
         if (unlocked) {
-          btnBg.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a });
+          btnBg.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a, alpha: 0.85 });
           btnBg.stroke({ color: 0x9b59b6, width: 2 });
         } else {
-          btnBg.fill({ color: 0x111111, alpha: 0.5 });
+          btnBg.fill({ color: 0x111111, alpha: 0.6 });
           btnBg.stroke({ color: 0x333333, width: 1 });
         }
         btn.addChild(btnBg);
