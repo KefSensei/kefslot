@@ -85,10 +85,11 @@ async function boot() {
   // Ensure interactivity on stage (hitArea is set in resize())
   app.stage.eventMode = 'static';
 
-  // Start game
+  // Start game — await init so scenes are built before first resize
   game = new Game(app);
+  await game.init();
 
-  // Initial resize after game is constructed
+  // Initial resize after game scenes are ready
   resize();
 }
 

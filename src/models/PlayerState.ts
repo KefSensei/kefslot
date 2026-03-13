@@ -63,6 +63,6 @@ export class PlayerState {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
     } catch { /* corrupt data */ }
-    return { coins: 1000, currentLevel: 1, levelResults: {}, musicMuted: false };
+    return { coins: 1000, currentLevel: 1, levelResults: {}, musicMuted: true };
   }
 }

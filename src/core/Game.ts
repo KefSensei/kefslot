@@ -77,10 +77,10 @@ export class Game {
 
   constructor(app: Application) {
     this.app = app;
-    this.init();
   }
 
-  private async init(): Promise<void> {
+  /** Must be called after construction and before first resize */
+  async init(): Promise<void> {
     // Preload image assets
     await this.loadAssets();
 
@@ -218,21 +218,25 @@ export class Game {
   }
 
   private buildGameScene(): void {
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+    const isPortrait = GameConfig.isPortrait;
+
     // Gradient background (dark purple → near-black)
     this.gameBg = new Graphics();
-    this.gameBg.rect(0, 0, GameConfig.width, GameConfig.height);
+    this.gameBg.rect(0, 0, w, h);
     this.gameBg.fill({ color: 0x0d0520 });
     this.gameScene.addChild(this.gameBg);
 
     // Upper gradient overlay (lighter purple fade)
     this.gameTopGrad = new Graphics();
-    this.gameTopGrad.rect(0, 0, GameConfig.width, 200);
+    this.gameTopGrad.rect(0, 0, w, 200);
     this.gameTopGrad.fill({ color: 0x2a1050, alpha: 0.4 });
     this.gameScene.addChild(this.gameTopGrad);
 
     // Ambient glow behind slot machine
     this.gameAmbientGlow = new Graphics();
-    this.gameAmbientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
+    this.gameAmbientGlow.circle(w / 2, h / 2 - 20, 280);
     this.gameAmbientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
     this.gameScene.addChild(this.gameAmbientGlow);
 
@@ -252,16 +256,16 @@ export class Game {
       }),
     });
     this.gameHeader.anchor.set(0.5);
-    this.gameHeader.x = GameConfig.width / 2;
+    this.gameHeader.x = w / 2;
     this.gameHeader.y = 78;
+    this.gameHeader.visible = !isPortrait;
     this.gameScene.addChild(this.gameHeader);
 
     // HUD
     this.hud = new HUD();
     this.hud.setMusicMuted(this.player.musicMuted);
-    if (this.player.musicMuted) {
-      Howler.mute(true);
-    }
+    Howler.mute(this.player.musicMuted);
+    if (isPortrait) this.hud.setPortrait(true);
     this.hud.onMusicToggle = (muted) => {
       this.player.setMusicMuted(muted);
       Howler.mute(muted);
@@ -270,23 +274,24 @@ export class Game {
 
     // Slot Grid
     this.slotGrid = new SlotGrid();
-    this.slotGrid.x = GameConfig.width / 2;
-    this.slotGrid.y = GameConfig.height / 2 - 20;
+    this.slotGrid.x = w / 2;
+    this.slotGrid.y = isPortrait ? h / 2 - 60 : h / 2 - 20;
     this.slotGrid.onSwapAttempt = (r1, c1, r2, c2) => this.handleSwap(r1, c1, r2, c2);
     this.slotGrid.onPowerUpTap = (r, c) => this.handlePowerUpActivation(r, c);
     this.gameScene.addChild(this.slotGrid);
 
     // Spin Button
     this.spinButton = new SpinButton();
-    this.spinButton.x = GameConfig.width / 2;
-    this.spinButton.y = GameConfig.height - 45;
+    this.spinButton.x = w / 2;
+    this.spinButton.y = isPortrait ? h - 55 : h - 45;
+    if (isPortrait) this.spinButton.setPortrait(true);
     this.spinButton.onSpin = () => this.handleSpin();
     this.gameScene.addChild(this.spinButton);
 
     // Goal display
     this.goalDisplay = new Container();
-    this.goalDisplay.x = GameConfig.width / 2;
-    this.goalDisplay.y = GameConfig.height - 90;
+    this.goalDisplay.x = w / 2;
+    this.goalDisplay.y = isPortrait ? h - 110 : h - 90;
     this.gameScene.addChild(this.goalDisplay);
 
     // Level Intro overlay
