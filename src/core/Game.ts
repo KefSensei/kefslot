@@ -6,6 +6,7 @@ import levelSelectBgPortraitUrl from '@/assets/sprites/levelselect-bg-portrait.p
 import gameBgLandscapeUrl from '@/assets/sprites/game-bg-landscape.png';
 import gameBgPortraitUrl from '@/assets/sprites/game-bg-portrait.png';
 import { GameConfig } from '@/config/GameConfig';
+import { loadSymbolTextures } from '@/config/SymbolTextures';
 import { getLevelConfig } from '@/config/LevelConfig';
 import { StateMachine, GameState } from '@/core/StateMachine';
 import { events } from '@/core/EventBus';
@@ -19,6 +20,7 @@ import { SpinButton } from '@/ui/SpinButton';
 import { LevelSelect } from '@/ui/LevelSelect';
 import { LevelComplete } from '@/ui/LevelComplete';
 import { LevelIntro } from '@/ui/LevelIntro';
+import { MenuScreen } from '@/ui/MenuScreen';
 import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
@@ -39,7 +41,7 @@ export class Game {
   private sfx = new SFXManager();
 
   // Scenes
-  private menuScene = new Container();
+  private menuScreen!: MenuScreen;
   private levelSelectScene!: LevelSelect;
   private gameScene = new Container();
 
@@ -63,13 +65,7 @@ export class Game {
   private levelSelectBgTextures!: { landscape: Texture; portrait: Texture };
   private gameBgTextures!: { landscape: Texture; portrait: Texture };
 
-  // Menu scene layout references
-  private menuBg!: Sprite;
-  private menuGlow!: Graphics;
-  private menuTitle!: Text;
-  private menuSub!: Text;
-  private menuRoxyContainer!: Container;
-  private menuPlayBtn!: Container;
+  // (Menu UI is now handled by MenuScreen class)
 
   // Game state
   private currentLevelDef: LevelDef | null = null;
@@ -114,117 +110,19 @@ export class Game {
     this.menuBgTextures = { landscape: menuL, portrait: menuP };
     this.levelSelectBgTextures = { landscape: lsL, portrait: lsP };
     this.gameBgTextures = { landscape: gameL, portrait: gameP };
+
+    // Load symbol sprite textures
+    await loadSymbolTextures();
   }
 
   private buildMenuScene(): void {
-    const w = GameConfig.activeWidth;
-    const h = GameConfig.activeHeight;
-
-    // Background image (switches between landscape/portrait textures)
-    const isPortrait = GameConfig.isPortrait;
-    this.menuBg = new Sprite(isPortrait ? this.menuBgTextures.portrait : this.menuBgTextures.landscape);
-    this.menuBg.width = w;
-    this.menuBg.height = h;
-    this.menuScene.addChild(this.menuBg);
-
-    // Soft dark vignette behind title/UI area for text readability
-    this.menuGlow = new Graphics();
-    this.menuGlow.ellipse(w / 2, h * 0.4, w * 0.45, h * 0.35);
-    this.menuGlow.fill({ color: 0x0a0018, alpha: 0.45 });
-    this.menuScene.addChild(this.menuGlow);
-
-    // Title
-    this.menuTitle = new Text({
-      text: "Roxy's\nMagic Reels",
-      style: new TextStyle({
-        fontSize: 48,
-        fill: 0xf1c40f,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        align: 'center',
-        lineHeight: 56,
-        dropShadow: {
-          color: 0x9b59b6,
-          distance: 3,
-          alpha: 1,
-        },
-      }),
-    });
-    this.menuTitle.anchor.set(0.5);
-    this.menuTitle.x = w / 2;
-    this.menuTitle.y = h * 0.22;
-    this.menuScene.addChild(this.menuTitle);
-
-    // Subtitle
-    this.menuSub = new Text({
-      text: 'A Slot + Match-3 Adventure',
-      style: new TextStyle({ fontSize: 18, fill: 0xb0a0c0, fontFamily: 'Segoe UI, sans-serif' }),
-    });
-    this.menuSub.anchor.set(0.5);
-    this.menuSub.x = w / 2;
-    this.menuSub.y = h * 0.34;
-    this.menuScene.addChild(this.menuSub);
-
-    // Roxy placeholder (simple character) — drawn at origin, positioned via container
-    this.menuRoxyContainer = new Container();
-    this.menuRoxyContainer.x = w / 2;
-    this.menuRoxyContainer.y = h * 0.48;
-    const roxy = new Graphics();
-    // Body
-    roxy.circle(0, 0, 30);
-    roxy.fill({ color: 0xf39c12 });
-    // Hat
-    roxy.moveTo(-25, -25);
-    roxy.lineTo(0, -65);
-    roxy.lineTo(25, -25);
-    roxy.closePath();
-    roxy.fill({ color: 0x9b59b6 });
-    // Eyes
-    roxy.circle(-10, -5, 4);
-    roxy.circle(10, -5, 4);
-    roxy.fill({ color: 0x000000 });
-    // Smile
-    roxy.arc(0, 5, 10, 0, Math.PI);
-    roxy.stroke({ color: 0x000000, width: 2 });
-    this.menuRoxyContainer.addChild(roxy);
-    this.menuScene.addChild(this.menuRoxyContainer);
-
-    // Play button
-    this.menuPlayBtn = new Container();
-    this.menuPlayBtn.x = w / 2;
-    this.menuPlayBtn.y = h * 0.64;
-    const playBg = new Graphics();
-    playBg.roundRect(-90, -30, 180, 60, 30);
-    playBg.fill({ color: 0x9b59b6 });
-    playBg.stroke({ color: 0xf1c40f, width: 3 });
-    this.menuPlayBtn.addChild(playBg);
-
-    const playText = new Text({
-      text: 'PLAY',
-      style: new TextStyle({
-        fontSize: 26,
-        fill: 0xffffff,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        letterSpacing: 6,
-      }),
-    });
-    playText.anchor.set(0.5);
-    this.menuPlayBtn.addChild(playText);
-
-    this.menuPlayBtn.eventMode = 'static';
-    this.menuPlayBtn.cursor = 'pointer';
-    this.menuPlayBtn.on('pointerdown', () => {
+    this.menuScreen = new MenuScreen(this.menuBgTextures);
+    this.menuScreen.onPlay = () => {
       this.sfx.play('buttonPress');
       this.music.load();
       this.fsm.transition('LEVEL_SELECT');
-    });
-    this.menuScene.addChild(this.menuPlayBtn);
-
-    // Starfield on menu
-    this.addStarfield(this.menuScene);
-
-    this.app.stage.addChild(this.menuScene);
+    };
+    this.app.stage.addChild(this.menuScreen);
   }
 
   private buildLevelSelectScene(): void {
@@ -366,65 +264,23 @@ export class Game {
     this.levelIntro.relayout(w, h);
     this.levelComplete.relayout(w, h);
 
-    // Menu scene — swap background texture for orientation
-    this.menuBg.texture = isPortrait ? this.menuBgTextures.portrait : this.menuBgTextures.landscape;
-    this.menuBg.width = w;
-    this.menuBg.height = h;
-
-    this.menuGlow.clear();
-    this.menuGlow.ellipse(w / 2, h * 0.4, w * 0.45, h * 0.35);
-    this.menuGlow.fill({ color: 0x0a0018, alpha: 0.45 });
-
-    this.menuTitle.x = w / 2;
-    this.menuTitle.y = h * 0.22;
-    this.menuSub.x = w / 2;
-    this.menuSub.y = h * 0.34;
-    this.menuRoxyContainer.x = w / 2;
-    this.menuRoxyContainer.y = h * 0.48;
-    this.menuPlayBtn.x = w / 2;
-    this.menuPlayBtn.y = h * 0.64;
+    // Menu screen
+    this.menuScreen.relayout(isPortrait);
 
     // Level select uses activeWidth/activeHeight in build(), so refresh it
     this.levelSelectScene?.refresh();
   }
 
-  /** Add floating starfield particles to a scene */
-  private addStarfield(scene: Container): void {
-    for (let i = 0; i < 30; i++) {
-      const star = new Graphics();
-      const size = 1 + Math.random() * 2;
-      star.circle(0, 0, size);
-      star.fill({ color: 0xffffff, alpha: 0.1 + Math.random() * 0.3 });
-      star.x = Math.random() * GameConfig.width;
-      star.y = Math.random() * GameConfig.height;
-      scene.addChildAt(star, Math.min(scene.children.length, 3));
-
-      // Twinkle
-      gsap.to(star, {
-        alpha: 0.1 + Math.random() * 0.5,
-        duration: 2 + Math.random() * 3,
-        yoyo: true,
-        repeat: -1,
-        ease: 'sine.inOut',
-        delay: Math.random() * 4,
-      });
-
-      // Slow drift
-      gsap.to(star, {
-        y: star.y + 20 + Math.random() * 30,
-        duration: 8 + Math.random() * 6,
-        yoyo: true,
-        repeat: -1,
-        ease: 'sine.inOut',
-      });
-    }
-  }
+  // (Starfield is now part of MenuScreen)
 
   private showScene(scene: 'menu' | 'levelSelect' | 'game'): void {
-    this.menuScene.visible = scene === 'menu';
+    this.menuScreen.visible = scene === 'menu';
     this.levelSelectScene.visible = scene === 'levelSelect';
     this.gameScene.visible = scene === 'game';
 
+    if (scene === 'menu') {
+      this.menuScreen.playEntrance();
+    }
     if (scene === 'levelSelect') {
       this.levelSelectScene.refresh();
     }

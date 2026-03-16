@@ -87,6 +87,9 @@ async function boot() {
   // Ensure interactivity on stage (hitArea is set in resize())
   app.stage.eventMode = 'static';
 
+  // Wait for custom fonts to load before rendering any text
+  await document.fonts.ready;
+
   // Start game — await init so scenes are built before first resize
   game = new Game(app);
   await game.init();

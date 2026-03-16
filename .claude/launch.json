@@ -3,11 +3,9 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/.bin/vite", "--port", "3005"],
-      "cwd": "/Users/eb/Documents/Projects/KefSlot",
-      "port": 3005,
-      "autoPort": true
+      "runtimeExecutable": "/Users/eb/Documents/Projects/KefSlot/node_modules/.bin/vite",
+      "runtimeArgs": ["--port", "3005"],
+      "port": 3005
     }
   ]
 }

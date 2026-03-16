@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, TextStyle, FederatedPointerEvent, FillGradient } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, TextStyle, FederatedPointerEvent, FillGradient } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { CellData, PowerUpType } from '@/models/Symbol';
 import { SymbolDef, getSymbolsForLevel } from '@/config/SymbolConfig';
@@ -6,6 +6,7 @@ import { weightedRandom } from '@/utils/MathUtils';
 import { createCell } from '@/models/Symbol';
 import { MatchEffects } from '@/effects/MatchEffects';
 import { lightenColor, darkenColor, colorToHex } from '@/utils/ColorUtils';
+import { getSymbolTexture } from '@/config/SymbolTextures';
 import gsap from 'gsap';
 
 /** Cell size — read dynamically so it updates when orientation changes */
@@ -704,10 +705,10 @@ export class SlotGrid extends Container {
   }
 }
 
-// Gem-like cell visual with gradient, shadow, shine, bevel
+// Gem-like cell visual with AI-generated sprite or fallback gradient shape
 class CellSprite extends Container {
   private bg: Graphics;
-  private icon: Graphics;
+  private icon: Container;
   private selectHighlight: Graphics;
 
   constructor(public data: CellData) {
@@ -720,9 +721,20 @@ class CellSprite extends Container {
     this.bg.fill({ color: 0x1e0a3a, alpha: 0.8 });
     this.addChild(this.bg);
 
-    // Symbol shape with gem treatment
-    this.icon = new Graphics();
-    this.drawGemShape(this.icon, data.symbol.shape, data.symbol.color, size);
+    // Symbol: use AI sprite if available, fallback to geometric shape
+    const texture = getSymbolTexture(data.symbol.id);
+    if (texture) {
+      const sprite = new Sprite(texture);
+      sprite.width = size * 0.9;
+      sprite.height = size * 0.9;
+      sprite.x = size * 0.05;
+      sprite.y = size * 0.05;
+      this.icon = sprite;
+    } else {
+      const g = new Graphics();
+      this.drawGemShape(g, data.symbol.shape, data.symbol.color, size);
+      this.icon = g;
+    }
     this.addChild(this.icon);
 
     // Power-up indicator
