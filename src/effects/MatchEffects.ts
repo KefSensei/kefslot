@@ -7,7 +7,7 @@ import gsap from 'gsap';
 export class MatchEffects extends Container {
   /** Spawn confetti particles at the given world positions */
   spawnConfetti(positions: { x: number; y: number }[], color: number): void {
-    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xF5D060];
+    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xf5d060];
     for (const pos of positions) {
       const count = 10;
       for (let i = 0; i < count; i++) {
@@ -57,6 +57,57 @@ export class MatchEffects extends Container {
         });
       }
     }
+  }
+
+  /** Show an animated match-count word (TRIPLE!, QUAD!, PENTA!, etc.) above the matched cells */
+  showMatchWord(x: number, y: number, matchCount: number, powerUpType?: string): void {
+    let label: string;
+    let color: number;
+
+    if (powerUpType === 'rainbow') {
+      label = 'RAINBOW BOOST!';
+      color = 0xff00ff;
+    } else if (powerUpType === 'blast') {
+      label = 'BLAST!';
+      color = 0x00e5ff;
+    } else if (powerUpType === 'bomb') {
+      label = 'BOMB!';
+      color = 0xff5722;
+    } else if (matchCount >= 5) {
+      label = 'PENTA!';
+      color = 0xf1c40f;
+    } else if (matchCount === 4) {
+      label = 'QUAD!';
+      color = 0x2ecc71;
+    } else {
+      label = 'TRIPLE!';
+      color = 0x3498db;
+    }
+
+    const text = new Text({
+      text: label,
+      style: new TextStyle({
+        fontSize: 28,
+        fill: color,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        stroke: { color: 0x000000, width: 5 },
+        dropShadow: { color: 0x000000, distance: 2, alpha: 0.7 },
+      }),
+    });
+    text.anchor.set(0.5);
+    text.x = x;
+    text.y = y - 20;
+    text.alpha = 0;
+    text.scale.set(0.3);
+    this.addChild(text);
+
+    const tl = gsap.timeline();
+    tl.to(text, { alpha: 1, duration: 0.12 }, 0);
+    tl.to(text.scale, { x: 1.3, y: 1.3, duration: 0.22, ease: 'back.out(2)' }, 0);
+    tl.to(text.scale, { x: 1.0, y: 1.0, duration: 0.12 }, 0.22);
+    tl.to(text, { y: text.y - 55, duration: 0.7, ease: 'power2.out' }, 0.1);
+    tl.to(text, { alpha: 0, duration: 0.3, ease: 'power2.in', onComplete: () => text.destroy() }, 0.65);
   }
 
   /** Show a floating score number rising from a position */
@@ -194,7 +245,8 @@ export class MatchEffects extends Container {
           onComplete: () => p.destroy(),
         });
         gsap.to(p.scale, {
-          x: 0, y: 0,
+          x: 0,
+          y: 0,
           duration: 0.3 + Math.random() * 0.2,
           delay: 0.15,
           ease: 'power2.in',
@@ -328,7 +380,8 @@ export class MatchEffects extends Container {
         onComplete: () => p.destroy(),
       });
       gsap.to(p.scale, {
-        x: 0, y: 0,
+        x: 0,
+        y: 0,
         duration: 0.4 + Math.random() * 0.2,
         delay: 0.2,
         ease: 'power2.in',

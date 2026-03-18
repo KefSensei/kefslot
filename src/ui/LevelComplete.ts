@@ -4,6 +4,7 @@ import gsap from 'gsap';
 
 export class LevelComplete extends Container {
   onContinue: (() => void) | null = null;
+  onDismiss: (() => void) | null = null;
   private overlay: Graphics | null = null;
   private panel: Container | null = null;
 
@@ -48,6 +49,39 @@ export class LevelComplete extends Container {
     panelBg.fill({ color: 0x1e0a3a });
     panelBg.stroke({ color: data.passed ? 0xf1c40f : 0xe74c3c, width: 3 });
     panel.addChild(panelBg);
+
+    // Dismiss (×) button — top-right corner
+    const closeBtn = new Container();
+    closeBtn.x = 158;
+    closeBtn.y = -128;
+    const closeBg = new Graphics();
+    closeBg.circle(0, 0, 14);
+    closeBg.fill({ color: 0x444444, alpha: 0.85 });
+    closeBtn.addChild(closeBg);
+    const closeText = new Text({
+      text: '×',
+      style: new TextStyle({ fontSize: 20, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'Segoe UI, sans-serif' }),
+    });
+    closeText.anchor.set(0.5, 0.5);
+    closeText.y = 1;
+    closeBtn.addChild(closeText);
+    closeBtn.eventMode = 'static';
+    closeBtn.cursor = 'pointer';
+    closeBtn.on('pointerdown', () => {
+      this.visible = false;
+      this.onDismiss?.();
+    });
+    closeBtn.on('pointerover', () => {
+      closeBg.clear();
+      closeBg.circle(0, 0, 14);
+      closeBg.fill({ color: 0x777777, alpha: 0.95 });
+    });
+    closeBtn.on('pointerout', () => {
+      closeBg.clear();
+      closeBg.circle(0, 0, 14);
+      closeBg.fill({ color: 0x444444, alpha: 0.85 });
+    });
+    panel.addChild(closeBtn);
 
     // Title
     const title = new Text({
