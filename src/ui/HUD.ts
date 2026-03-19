@@ -65,7 +65,7 @@ export class HUD extends Container {
     // Gold accent line at bottom
     this.accentLine = new Graphics();
     this.accentLine.rect(0, 58, GameConfig.width, 2);
-    this.accentLine.fill({ color: 0xD4AF37, alpha: 0.6 });
+    this.accentLine.fill({ color: 0xd4af37, alpha: 0.6 });
     this.addChild(this.accentLine);
 
     // Level
@@ -109,12 +109,15 @@ export class HUD extends Container {
     this.multLabel.x = 480;
     this.multLabel.y = 6;
     this.addChild(this.multLabel);
-    this.multiplierText = new Text({ text: 'x1', style: new TextStyle({
-      fontSize: 24,
-      fill: 0xff6b6b,
-      fontWeight: 'bold',
-      fontFamily: 'monospace',
-    })});
+    this.multiplierText = new Text({
+      text: 'x1',
+      style: new TextStyle({
+        fontSize: 24,
+        fill: 0xff6b6b,
+        fontWeight: 'bold',
+        fontFamily: 'monospace',
+      }),
+    });
     this.multiplierText.x = 480;
     this.multiplierText.y = 22;
     this.addChild(this.multiplierText);
@@ -127,21 +130,27 @@ export class HUD extends Container {
 
     this.coinIcon = new Graphics();
     this.coinIcon.circle(630, 36, 10);
-    this.coinIcon.fill({ color: 0xD4AF37 });
-    this.coinIcon.stroke({ color: 0xF5D060, width: 1.5 });
+    this.coinIcon.fill({ color: 0xd4af37 });
+    this.coinIcon.stroke({ color: 0xf5d060, width: 1.5 });
     this.addChild(this.coinIcon);
-    this.coinC = new Text({ text: 'C', style: new TextStyle({ fontSize: 11, fill: 0x8B7332, fontWeight: 'bold', fontFamily: 'monospace' }) });
+    this.coinC = new Text({
+      text: 'C',
+      style: new TextStyle({ fontSize: 11, fill: 0x8b7332, fontWeight: 'bold', fontFamily: 'monospace' }),
+    });
     this.coinC.anchor.set(0.5);
     this.coinC.x = 630;
     this.coinC.y = 36;
     this.addChild(this.coinC);
 
-    this.coinsText = new Text({ text: '1000', style: new TextStyle({
-      fontSize: 20,
-      fill: 0xf39c12,
-      fontWeight: 'bold',
-      fontFamily: 'monospace',
-    })});
+    this.coinsText = new Text({
+      text: '1000',
+      style: new TextStyle({
+        fontSize: 20,
+        fill: 0xf39c12,
+        fontWeight: 'bold',
+        fontFamily: 'monospace',
+      }),
+    });
     this.coinsText.x = 650;
     this.coinsText.y = 24;
     this.addChild(this.coinsText);
@@ -185,17 +194,20 @@ export class HUD extends Container {
     this.addChild(this.sfxBtn);
 
     // Message (centered on slot grid)
-    this.messageText = new Text({ text: '', style: new TextStyle({
-      fontSize: 20,
-      fill: 0xf1c40f,
-      fontWeight: 'bold',
-      fontFamily: 'Segoe UI, sans-serif',
-      dropShadow: {
-        color: 0x000000,
-        distance: 2,
-        alpha: 1,
-      },
-    })});
+    this.messageText = new Text({
+      text: '',
+      style: new TextStyle({
+        fontSize: 20,
+        fill: 0xf1c40f,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        dropShadow: {
+          color: 0x000000,
+          distance: 2,
+          alpha: 1,
+        },
+      }),
+    });
     this.messageText.anchor.set(0.5);
     this.messageText.x = GameConfig.width / 2;
     this.messageText.y = GameConfig.height / 2 - 20;
@@ -215,7 +227,7 @@ export class HUD extends Container {
 
     this.accentLine.clear();
     this.accentLine.rect(0, 58, w, 2);
-    this.accentLine.fill({ color: 0xD4AF37, alpha: 0.6 });
+    this.accentLine.fill({ color: 0xd4af37, alpha: 0.6 });
 
     if (isPortrait) {
       // Compact layout for ~500px width
@@ -306,9 +318,10 @@ export class HUD extends Container {
   setMultiplier(mult: number): void {
     this.multiplierText.text = `x${mult}`;
     if (mult > 1) {
-      gsap.fromTo(this.multiplierText.scale,
+      gsap.fromTo(
+        this.multiplierText.scale,
         { x: 1, y: 1 },
-        { x: 1.3, y: 1.3, duration: 0.15, yoyo: true, repeat: 1, ease: 'back.out' }
+        { x: 1.3, y: 1.3, duration: 0.15, yoyo: true, repeat: 1, ease: 'back.out' },
       );
     }
   }

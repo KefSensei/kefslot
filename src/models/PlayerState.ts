@@ -19,9 +19,15 @@ export class PlayerState {
     this.data = this.load();
   }
 
-  get coins(): number { return this.data.coins; }
-  get currentLevel(): number { return this.data.currentLevel; }
-  get musicMuted(): boolean { return this.data.musicMuted; }
+  get coins(): number {
+    return this.data.coins;
+  }
+  get currentLevel(): number {
+    return this.data.currentLevel;
+  }
+  get musicMuted(): boolean {
+    return this.data.musicMuted;
+  }
 
   setMusicMuted(muted: boolean): void {
     this.data.musicMuted = muted;
@@ -55,14 +61,18 @@ export class PlayerState {
   private save(): void {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data));
-    } catch { /* storage full or unavailable */ }
+    } catch {
+      /* storage full or unavailable */
+    }
   }
 
   private load(): PlayerData {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
-    } catch { /* corrupt data */ }
+    } catch {
+      /* corrupt data */
+    }
     return { coins: 1000, currentLevel: 1, levelResults: {}, musicMuted: true };
   }
 }

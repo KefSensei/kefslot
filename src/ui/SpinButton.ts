@@ -23,7 +23,7 @@ export class SpinButton extends Container {
     // Glow ring (behind button, visible when enabled)
     this.glowRing = new Graphics();
     this.glowRing.roundRect(-88, -33, 176, 66, 33);
-    this.glowRing.fill({ color: 0xF5D060, alpha: 0.25 });
+    this.glowRing.fill({ color: 0xf5d060, alpha: 0.25 });
     this.addChildAt(this.glowRing, 0);
 
     // Main body
@@ -123,7 +123,7 @@ export class SpinButton extends Container {
 
     this.glowRing.clear();
     this.glowRing.roundRect(-hw - 8, -hh - 5, (hw + 8) * 2, (hh + 5) * 2, r + 5);
-    this.glowRing.fill({ color: 0xF5D060, alpha: 0.25 });
+    this.glowRing.fill({ color: 0xf5d060, alpha: 0.25 });
 
     this.gloss.clear();
     this.gloss.roundRect(-hw + 4, -hh + 2, (hw - 4) * 2, hh, r / 2);
@@ -145,6 +145,6 @@ export class SpinButton extends Container {
     this.bg.clear();
     this.bg.roundRect(-hw, -hh, hw * 2, hh * 2, r);
     this.bg.fill({ color });
-    this.bg.stroke({ color: 0xF5D060, width: 3 });
+    this.bg.stroke({ color: 0xf5d060, width: 3 });
   }
 }

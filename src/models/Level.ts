@@ -16,7 +16,7 @@ export interface LevelDef {
   id: number;
   world: number;
   name: string;
-  spins: number;        // total spins allowed
+  spins: number; // total spins allowed
   movesPerSpin: number; // match-3 moves per spin
   goals: Omit<LevelGoal, 'current'>[];
   availableSymbolIds: string[];

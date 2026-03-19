@@ -7,7 +7,7 @@ import gsap from 'gsap';
 export class MatchEffects extends Container {
   /** Spawn confetti particles at the given world positions */
   spawnConfetti(positions: { x: number; y: number }[], color: number): void {
-    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xF5D060];
+    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xf5d060];
     for (const pos of positions) {
       const count = 10;
       for (let i = 0; i < count; i++) {
@@ -194,7 +194,8 @@ export class MatchEffects extends Container {
           onComplete: () => p.destroy(),
         });
         gsap.to(p.scale, {
-          x: 0, y: 0,
+          x: 0,
+          y: 0,
           duration: 0.3 + Math.random() * 0.2,
           delay: 0.15,
           ease: 'power2.in',
@@ -328,7 +329,8 @@ export class MatchEffects extends Container {
         onComplete: () => p.destroy(),
       });
       gsap.to(p.scale, {
-        x: 0, y: 0,
+        x: 0,
+        y: 0,
         duration: 0.4 + Math.random() * 0.2,
         delay: 0.2,
         ease: 'power2.in',

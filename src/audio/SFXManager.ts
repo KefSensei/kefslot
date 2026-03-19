@@ -26,10 +26,10 @@ export type SFXName =
   | 'blockerBreak';
 
 export interface SFXOptions {
-  pitch?: number;        // semitone offset
-  volume?: number;       // 0–1 override
+  pitch?: number; // semitone offset
+  volume?: number; // 0–1 override
   cascadeLevel?: number;
-  starIndex?: number;    // 0, 1, 2
+  starIndex?: number; // 0, 1, 2
 }
 
 const STORAGE_KEY = 'kefslot_sfx_muted';
@@ -56,31 +56,75 @@ export class SFXManager {
     const t = this.ctx.currentTime;
 
     switch (name) {
-      case 'buttonPress':   this.playButtonPress(t, vol); break;
-      case 'reelSpin':      this.playReelSpin(t, vol); break;
-      case 'reelStop':      this.playReelStop(t, vol, opts.pitch ?? 0); break;
-      case 'swap':          this.playSwap(t, vol); break;
-      case 'invalidSwap':   this.playInvalidSwap(t, vol); break;
-      case 'match3':        this.playMatch3(t, vol); break;
-      case 'match4':        this.playMatch4(t, vol); break;
-      case 'match5':        this.playMatch5(t, vol); break;
-      case 'cascade':       this.playCascade(t, vol, opts.cascadeLevel ?? 0); break;
-      case 'multiplier':    this.playMultiplier(t, vol); break;
-      case 'powerUpCreate': this.playPowerUpCreate(t, vol); break;
-      case 'confetti':      this.playConfetti(t, vol); break;
-      case 'scorePop':      this.playScorePop(t, vol); break;
-      case 'starEarned':    this.playStarEarned(t, vol, opts.starIndex ?? 0); break;
-      case 'levelComplete': this.playLevelComplete(t, vol); break;
-      case 'levelFailed':   this.playLevelFailed(t, vol); break;
-      case 'coinEarned':    this.playCoinEarned(t, vol); break;
-      case 'levelIntro':    this.playLevelIntro(t, vol); break;
-      case 'powerUpActivate': this.playPowerUpActivate(t, vol); break;
-      case 'blockerCrack':  this.playBlockerCrack(t, vol); break;
-      case 'blockerBreak':  this.playBlockerBreak(t, vol); break;
+      case 'buttonPress':
+        this.playButtonPress(t, vol);
+        break;
+      case 'reelSpin':
+        this.playReelSpin(t, vol);
+        break;
+      case 'reelStop':
+        this.playReelStop(t, vol, opts.pitch ?? 0);
+        break;
+      case 'swap':
+        this.playSwap(t, vol);
+        break;
+      case 'invalidSwap':
+        this.playInvalidSwap(t, vol);
+        break;
+      case 'match3':
+        this.playMatch3(t, vol);
+        break;
+      case 'match4':
+        this.playMatch4(t, vol);
+        break;
+      case 'match5':
+        this.playMatch5(t, vol);
+        break;
+      case 'cascade':
+        this.playCascade(t, vol, opts.cascadeLevel ?? 0);
+        break;
+      case 'multiplier':
+        this.playMultiplier(t, vol);
+        break;
+      case 'powerUpCreate':
+        this.playPowerUpCreate(t, vol);
+        break;
+      case 'confetti':
+        this.playConfetti(t, vol);
+        break;
+      case 'scorePop':
+        this.playScorePop(t, vol);
+        break;
+      case 'starEarned':
+        this.playStarEarned(t, vol, opts.starIndex ?? 0);
+        break;
+      case 'levelComplete':
+        this.playLevelComplete(t, vol);
+        break;
+      case 'levelFailed':
+        this.playLevelFailed(t, vol);
+        break;
+      case 'coinEarned':
+        this.playCoinEarned(t, vol);
+        break;
+      case 'levelIntro':
+        this.playLevelIntro(t, vol);
+        break;
+      case 'powerUpActivate':
+        this.playPowerUpActivate(t, vol);
+        break;
+      case 'blockerCrack':
+        this.playBlockerCrack(t, vol);
+        break;
+      case 'blockerBreak':
+        this.playBlockerBreak(t, vol);
+        break;
     }
   }
 
-  get muted(): boolean { return this._muted; }
+  get muted(): boolean {
+    return this._muted;
+  }
 
   setMuted(muted: boolean): void {
     this._muted = muted;
@@ -126,9 +170,13 @@ export class SFXManager {
   // ─── Utility Builders ────────────────────────────────────────────────────
 
   private tone(
-    freq: number, start: number, dur: number,
-    vol: number, type: OscillatorType = 'sine',
-    attack = 0.005, decay = dur * 0.8,
+    freq: number,
+    start: number,
+    dur: number,
+    vol: number,
+    type: OscillatorType = 'sine',
+    attack = 0.005,
+    decay = dur * 0.8,
   ): OscillatorNode {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator();
@@ -146,8 +194,12 @@ export class SFXManager {
   }
 
   private sweep(
-    startFreq: number, endFreq: number, start: number, dur: number,
-    vol: number, type: OscillatorType = 'sine',
+    startFreq: number,
+    endFreq: number,
+    start: number,
+    dur: number,
+    vol: number,
+    type: OscillatorType = 'sine',
   ): void {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator();
@@ -164,8 +216,11 @@ export class SFXManager {
   }
 
   private noise(
-    start: number, dur: number, vol: number,
-    filterFreq = 4000, filterType: BiquadFilterType = 'lowpass',
+    start: number,
+    dur: number,
+    vol: number,
+    filterFreq = 4000,
+    filterType: BiquadFilterType = 'lowpass',
   ): void {
     const ctx = this.ctx!;
     if (!this.noiseBuffer) return;

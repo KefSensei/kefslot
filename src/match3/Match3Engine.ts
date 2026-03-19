@@ -71,11 +71,12 @@ export class Match3Engine {
 
       for (const match of matches) {
         // Score
-        const baseScore = match.cells.length >= 5
-          ? GameConfig.match5Score
-          : match.cells.length >= 4
-            ? GameConfig.match4Score
-            : GameConfig.match3Score;
+        const baseScore =
+          match.cells.length >= 5
+            ? GameConfig.match5Score
+            : match.cells.length >= 4
+              ? GameConfig.match4Score
+              : GameConfig.match3Score;
         totalScore += baseScore * multiplier;
 
         // Create power-ups for 4+ matches
@@ -92,7 +93,7 @@ export class Match3Engine {
       events.emit('matchCleared', { matches, cascadeLevel });
 
       // Damage blockers adjacent to cleared cells
-      const allCells = matches.flatMap(m => m.cells);
+      const allCells = matches.flatMap((m) => m.cells);
       const blockerResult = this.damageAdjacentBlockers(allCells);
       for (const pos of blockerResult.destroyed) {
         this.grid[pos.row][pos.col] = null;
@@ -122,7 +123,14 @@ export class Match3Engine {
       matches = this.cascade.findMatches(this.grid);
     }
 
-    return { valid: true, matches: allMatches, powerUpsCreated: allPowerUps, score: totalScore, cascades: cascadeLevel, blockersDestroyed: totalBlockersDestroyed };
+    return {
+      valid: true,
+      matches: allMatches,
+      powerUpsCreated: allPowerUps,
+      score: totalScore,
+      cascades: cascadeLevel,
+      blockersDestroyed: totalBlockersDestroyed,
+    };
   }
 
   // Activate a power-up at the given position
@@ -233,8 +241,8 @@ export class Match3Engine {
     }
     if (match.cells.length === 4) {
       // Check if it's a line or L-shape
-      const isHorizontal = match.cells.every(c => c.row === match.cells[0].row);
-      const isVertical = match.cells.every(c => c.col === match.cells[0].col);
+      const isHorizontal = match.cells.every((c) => c.row === match.cells[0].row);
+      const isVertical = match.cells.every((c) => c.col === match.cells[0].col);
       const mid = match.cells[Math.floor(match.cells.length / 2)];
       if (isHorizontal || isVertical) {
         return { row: mid.row, col: mid.col, type: 'blast' };
