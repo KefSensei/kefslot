@@ -100,6 +100,27 @@ export class SpinButton extends Container {
     this.btnLabel.text = text;
   }
 
+  /**
+   * Switch between the default purple SPIN style and the orange re-spin style
+   * used when the player has exhausted moves and needs to spin again.
+   */
+  setRespinStyle(active: boolean): void {
+    const color = active ? 0xe67e22 : 0x9b59b6;
+    const glowColor = active ? 0xff9900 : 0xf5d060;
+
+    this.drawButton(color);
+
+    // Re-tint the glow ring
+    this.glowRing.clear();
+    const hw = (this.hitArea as Rectangle)?.width ? (this.hitArea as Rectangle).width / 2 : 80;
+    const hh = (this.hitArea as Rectangle)?.height ? (this.hitArea as Rectangle).height / 2 : 28;
+    const r = hh + 5;
+    this.glowRing.roundRect(-hw - 8, -hh - 5, (hw + 8) * 2, (hh + 5) * 2, r);
+    this.glowRing.fill({ color: glowColor, alpha: 0.3 });
+
+    this.btnLabel.style.letterSpacing = active ? 2 : 4;
+  }
+
   /** Attention-grabbing animation to prompt the player to press SPIN */
   playAttention(): void {
     const tl = gsap.timeline();

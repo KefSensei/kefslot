@@ -9,8 +9,11 @@ import { lightenColor, darkenColor, colorToHex } from '@/utils/ColorUtils';
 import { getSymbolTexture } from '@/config/SymbolTextures';
 import gsap from 'gsap';
 
-/** Cell size — read dynamically so it updates when orientation changes */
-const getCellSize = () => GameConfig.cellSize;
+/** Cell dimensions — read dynamically so they update when orientation changes */
+const getCellW = () => GameConfig.cellWidth;
+const getCellH = () => GameConfig.cellHeight;
+/** Symbol sizing uses the smaller dimension so symbols stay square */
+const getCellSize = () => Math.min(getCellW(), getCellH());
 const GAP = 4;
 
 // Cached gradients per symbol color
@@ -123,9 +126,10 @@ export class SlotGrid extends Container {
 
     const rows = GameConfig.rows;
     const cols = GameConfig.cols;
-    const CELL = getCellSize();
-    const totalW = cols * (CELL + GAP) - GAP;
-    const totalH = rows * (CELL + GAP) - GAP;
+    const CW = getCellW();
+    const CH = getCellH();
+    const totalW = cols * (CW + GAP) - GAP;
+    const totalH = rows * (CH + GAP) - GAP;
     const offsetX = -totalW / 2;
     const offsetY = -totalH / 2;
 
@@ -136,9 +140,9 @@ export class SlotGrid extends Container {
     const tilesBg = new Graphics();
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x = offsetX + c * (CELL + GAP);
-        const y = offsetY + r * (CELL + GAP);
-        tilesBg.roundRect(x, y, CELL, CELL, 6);
+        const x = offsetX + c * (CW + GAP);
+        const y = offsetY + r * (CH + GAP);
+        tilesBg.roundRect(x, y, CW, CH, 6);
         tilesBg.fill({ color: lightenColor(0x0d0520, 0.08), alpha: 0.7 });
       }
     }
@@ -150,8 +154,8 @@ export class SlotGrid extends Container {
         const data = this.gridData[r]?.[c];
         if (data) {
           const sprite = new CellSprite(data);
-          sprite.x = offsetX + c * (getCellSize() + GAP);
-          sprite.y = offsetY + r * (getCellSize() + GAP);
+          sprite.x = offsetX + c * (getCellW() + GAP);
+          sprite.y = offsetY + r * (getCellH() + GAP);
           this.addChild(sprite);
           this.cells[r][c] = sprite;
 
@@ -223,10 +227,10 @@ export class SlotGrid extends Container {
     // Reel dividers (vertical lines between columns)
     const cols = GameConfig.cols;
     for (let c = 1; c < cols; c++) {
-      const lx = offsetX + c * (getCellSize() + GAP) - GAP / 2;
+      const lx = offsetX + c * (getCellW() + GAP) - GAP / 2;
       const divider = new Graphics();
       divider.moveTo(lx, offsetY - 4);
-      divider.lineTo(lx, offsetY + GameConfig.rows * (getCellSize() + GAP) - GAP + 4);
+      divider.lineTo(lx, offsetY + GameConfig.rows * (getCellH() + GAP) - GAP + 4);
       divider.stroke({ color: 0x2a1050, width: 1.5, alpha: 0.5 });
       this.frameContainer.addChild(divider);
     }
@@ -362,7 +366,7 @@ export class SlotGrid extends Container {
     for (const pos of positions) {
       const sprite = this.cells[pos.row]?.[pos.col];
       if (sprite) {
-        worldPositions.push({ x: sprite.x + getCellSize() / 2, y: sprite.y + getCellSize() / 2 });
+        worldPositions.push({ x: sprite.x + getCellW() / 2, y: sprite.y + getCellH() / 2 });
         color = sprite.data.symbol.color;
         tl.to(sprite.scale, { x: 0, y: 0, duration: 0.25, ease: 'back.in' }, 0);
         tl.to(sprite, { alpha: 0, duration: 0.25 }, 0);
@@ -392,8 +396,8 @@ export class SlotGrid extends Container {
     this.removeSpinMask();
     const rows = GameConfig.rows;
     const cols = GameConfig.cols;
-    const totalW = cols * (getCellSize() + GAP) - GAP;
-    const totalH = rows * (getCellSize() + GAP) - GAP;
+    const totalW = cols * (getCellW() + GAP) - GAP;
+    const totalH = rows * (getCellH() + GAP) - GAP;
     const offsetX = -totalW / 2;
     const offsetY = -totalH / 2;
     const pad = 8; // small padding so symbols aren't clipped at the frame edge
@@ -525,7 +529,7 @@ export class SlotGrid extends Container {
     this.renderGrid();
 
     const tl = gsap.timeline();
-    const totalH = GameConfig.rows * (getCellSize() + GAP) - GAP;
+    const totalH = GameConfig.rows * (getCellH() + GAP) - GAP;
     const offsetY = -totalH / 2;
 
     for (let c = 0; c < GameConfig.cols; c++) {
@@ -591,7 +595,7 @@ export class SlotGrid extends Container {
   /** Get cell position in local coords */
   getCellPosition(row: number, col: number): { x: number; y: number } | null {
     const sprite = this.cells[row]?.[col];
-    if (sprite) return { x: sprite.x + getCellSize() / 2, y: sprite.y + getCellSize() / 2 };
+    if (sprite) return { x: sprite.x + getCellW() / 2, y: sprite.y + getCellH() / 2 };
     return null;
   }
 
@@ -713,45 +717,52 @@ class CellSprite extends Container {
 
   constructor(public data: CellData) {
     super();
-    const size = getCellSize();
+    const cellW = getCellW();
+    const cellH = getCellH();
+    const size = getCellSize(); // symbol icon stays square (min dimension)
 
-    // Background tile with subtle gradient center
+    // Background tile — rectangular to match cell shape
     this.bg = new Graphics();
-    this.bg.roundRect(0, 0, size, size, 8);
+    this.bg.roundRect(0, 0, cellW, cellH, 8);
     this.bg.fill({ color: 0x1e0a3a, alpha: 0.8 });
     this.addChild(this.bg);
 
     // Symbol: use AI sprite if available, fallback to geometric shape
+    // Center the square icon inside the rectangular cell
+    const iconSize = size * 0.88;
+    const iconX = (cellW - iconSize) / 2;
+    const iconY = (cellH - iconSize) / 2;
     const texture = getSymbolTexture(data.symbol.id);
     if (texture) {
       const sprite = new Sprite(texture);
-      sprite.width = size * 0.9;
-      sprite.height = size * 0.9;
-      sprite.x = size * 0.05;
-      sprite.y = size * 0.05;
+      sprite.width = iconSize;
+      sprite.height = iconSize;
+      sprite.x = iconX;
+      sprite.y = iconY;
       this.icon = sprite;
     } else {
       const g = new Graphics();
-      this.drawGemShape(g, data.symbol.shape, data.symbol.color, size);
+      // Draw gem centered in the cell using iconSize as the reference
+      this.drawGemShape(g, data.symbol.shape, data.symbol.color, iconSize, iconX, iconY);
       this.icon = g;
     }
     this.addChild(this.icon);
 
     // Power-up indicator
     if (data.powerUp) {
-      const puIcon = this.createPowerUpIndicator(data.powerUp);
+      const puIcon = this.createPowerUpIndicator(data.powerUp, cellW, cellH);
       this.addChild(puIcon);
     }
 
     // Blocker overlay
     if (data.isBlocker) {
-      const blockerOverlay = this.createBlockerOverlay(data.blockerHealth, size);
+      const blockerOverlay = this.createBlockerOverlay(data.blockerHealth, cellW, cellH);
       this.addChild(blockerOverlay);
     }
 
     // Selection highlight
     this.selectHighlight = new Graphics();
-    this.selectHighlight.roundRect(-3, -3, size + 6, size + 6, 10);
+    this.selectHighlight.roundRect(-3, -3, cellW + 6, cellH + 6, 10);
     this.selectHighlight.stroke({ color: 0xf5d060, width: 3, alpha: 0.9 });
     this.selectHighlight.visible = false;
     this.addChild(this.selectHighlight);
@@ -766,9 +777,9 @@ class CellSprite extends Container {
     }
   }
 
-  private drawGemShape(g: Graphics, shape: string, color: number, size: number): void {
-    const cx = size / 2;
-    const cy = size / 2;
+  private drawGemShape(g: Graphics, shape: string, color: number, size: number, ox = 0, oy = 0): void {
+    const cx = ox + size / 2;
+    const cy = oy + size / 2;
     const r = size * 0.3;
     const gradient = getSymbolGradient(color);
     const darkColor = darkenColor(color, 0.5);
@@ -861,15 +872,14 @@ class CellSprite extends Container {
     }
   }
 
-  private createPowerUpIndicator(type: PowerUpType): Container {
+  private createPowerUpIndicator(type: PowerUpType, cellW: number, cellH: number): Container {
     const container = new Container();
-    const size = getCellSize();
     const color = type === 'blast' ? 0x00e5ff : type === 'bomb' ? 0xff5722 : 0xffd700;
     const label = type === 'blast' ? 'BLAST' : type === 'bomb' ? 'BOMB' : 'RAINBOW';
 
     // Full-width banner at bottom of cell
     const bg = new Graphics();
-    bg.roundRect(2, size - 22, size - 4, 20, 4);
+    bg.roundRect(2, cellH - 20, cellW - 4, 18, 4);
     bg.fill({ color: 0x000000, alpha: 0.7 });
     bg.stroke({ color, width: 1.5, alpha: 0.9 });
     container.addChild(bg);
@@ -877,7 +887,7 @@ class CellSprite extends Container {
     const text = new Text({
       text: label,
       style: new TextStyle({
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
         fill: color,
@@ -885,43 +895,43 @@ class CellSprite extends Container {
       }),
     });
     text.anchor.set(0.5);
-    text.x = size / 2;
-    text.y = size - 12;
+    text.x = cellW / 2;
+    text.y = cellH - 11;
     container.addChild(text);
 
     return container;
   }
 
-  private createBlockerOverlay(health: number, size: number): Graphics {
+  private createBlockerOverlay(health: number, cellW: number, cellH: number): Graphics {
     const g = new Graphics();
     if (health >= 2) {
       // Stone: gray overlay with cross-hatch
-      g.roundRect(2, 2, size - 4, size - 4, 6);
+      g.roundRect(2, 2, cellW - 4, cellH - 4, 6);
       g.fill({ color: 0x888888, alpha: 0.55 });
       g.stroke({ color: 0x666666, width: 2 });
       // Cross-hatch pattern
-      g.moveTo(size * 0.2, size * 0.2);
-      g.lineTo(size * 0.8, size * 0.8);
+      g.moveTo(cellW * 0.2, cellH * 0.2);
+      g.lineTo(cellW * 0.8, cellH * 0.8);
       g.stroke({ color: 0x555555, width: 1.5, alpha: 0.5 });
-      g.moveTo(size * 0.8, size * 0.2);
-      g.lineTo(size * 0.2, size * 0.8);
+      g.moveTo(cellW * 0.8, cellH * 0.2);
+      g.lineTo(cellW * 0.2, cellH * 0.8);
       g.stroke({ color: 0x555555, width: 1.5, alpha: 0.5 });
-      // "2" indicator
-      g.circle(size / 2, size / 2, 12);
+      // health indicator
+      g.circle(cellW / 2, cellH / 2, 12);
       g.fill({ color: 0x444444, alpha: 0.7 });
       g.stroke({ color: 0xaaaaaa, width: 1 });
     } else {
       // Ice: blue-white translucent overlay with diagonal cracks
-      g.roundRect(2, 2, size - 4, size - 4, 6);
+      g.roundRect(2, 2, cellW - 4, cellH - 4, 6);
       g.fill({ color: 0xaaddff, alpha: 0.45 });
       g.stroke({ color: 0x88ccff, width: 2, alpha: 0.7 });
       // Diagonal crack lines
-      g.moveTo(size * 0.15, size * 0.3);
-      g.lineTo(size * 0.45, size * 0.55);
-      g.lineTo(size * 0.35, size * 0.75);
+      g.moveTo(cellW * 0.15, cellH * 0.3);
+      g.lineTo(cellW * 0.45, cellH * 0.55);
+      g.lineTo(cellW * 0.35, cellH * 0.75);
       g.stroke({ color: 0xffffff, width: 1.5, alpha: 0.6 });
-      g.moveTo(size * 0.6, size * 0.15);
-      g.lineTo(size * 0.7, size * 0.45);
+      g.moveTo(cellW * 0.6, cellH * 0.15);
+      g.lineTo(cellW * 0.7, cellH * 0.45);
       g.stroke({ color: 0xffffff, width: 1, alpha: 0.4 });
     }
     return g;

@@ -1,10 +1,10 @@
-import { Container, Graphics, Text, TextStyle, Sprite, Texture, FederatedPointerEvent } from 'pixi.js';
+import { Container, Graphics, Text, TextStyle, Sprite, Texture, FederatedPointerEvent, Rectangle } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { LevelConfigs } from '@/config/LevelConfig';
 import { PlayerState } from '@/models/PlayerState';
 
 /** Perpendicular offset (normalized) from road center to node edge */
-const ROAD_OFFSET = 0.045;
+const ROAD_OFFSET = 0.044;
 
 /**
  * Given a list of road-center waypoints, offset odd levels left and even
@@ -32,53 +32,55 @@ function offsetFromRoad(centers: [number, number][]): [number, number][] {
 }
 
 // Road centerline traced from the portrait world-map art (500×900 canvas).
+// Order: L1 at bottom → L20 at top (player progresses upward).
 const ROAD_CENTER_PORTRAIT: [number, number][] = [
-  [0.26, 0.19], // L1
-  [0.47, 0.28], // L2
-  [0.61, 0.27], // L3
-  [0.54, 0.32], // L4
-  [0.71, 0.34], // L5
-  [0.61, 0.39], // L6
-  [0.43, 0.37], // L7
-  [0.29, 0.4], // L8
-  [0.43, 0.43], // L9
-  [0.28, 0.48], // L10
-  [0.46, 0.49], // L11
-  [0.64, 0.51], // L12
-  [0.54, 0.55], // L13
-  [0.47, 0.61], // L14
-  [0.38, 0.65], // L15
-  [0.53, 0.67], // L16
-  [0.5, 0.73], // L17
-  [0.59, 0.77], // L18
-  [0.42, 0.8], // L19
-  [0.31, 0.91], // L20
+  [0.31, 0.91], // L1  (was L20)
+  [0.42, 0.8], // L2  (was L19)
+  [0.59, 0.77], // L3  (was L18)
+  [0.5, 0.73], // L4  (was L17)
+  [0.53, 0.67], // L5  (was L16)
+  [0.38, 0.65], // L6  (was L15)
+  [0.47, 0.61], // L7  (was L14)
+  [0.54, 0.55], // L8  (was L13)
+  [0.64, 0.51], // L9  (was L12)
+  [0.46, 0.49], // L10 (was L11)
+  [0.28, 0.48], // L11 (was L10)
+  [0.43, 0.43], // L12 (was L9)
+  [0.29, 0.4], // L13 (was L8)
+  [0.43, 0.37], // L14 (was L7)
+  [0.61, 0.39], // L15 (was L6)
+  [0.71, 0.34], // L16 (was L5)
+  [0.54, 0.32], // L17 (was L4)
+  [0.61, 0.27], // L18 (was L3)
+  [0.47, 0.28], // L19 (was L2)
+  [0.26, 0.19], // L20 (was L1)
 ];
 
 const PATH_PORTRAIT = offsetFromRoad(ROAD_CENTER_PORTRAIT);
 
-// Road centerline for landscape (800×700 canvas) — tapped via debug overlay.
+// Road centerline for landscape (800×700 canvas) — re-traced bottom→top along the yellow brick path.
+// Order: L1 at bottom → L20 at top (player progresses upward).
 const ROAD_CENTER_LANDSCAPE: [number, number][] = [
-  [0.42, 0.07], // L1
-  [0.55, 0.05], // L2
-  [0.56, 0.13], // L3
-  [0.67, 0.21], // L4
-  [0.55, 0.27], // L5
-  [0.43, 0.23], // L6
-  [0.44, 0.34], // L7
-  [0.32, 0.3], // L8
-  [0.32, 0.39], // L9
-  [0.36, 0.47], // L10
-  [0.45, 0.48], // L11
-  [0.56, 0.48], // L12
-  [0.64, 0.55], // L13
-  [0.57, 0.6], // L14
-  [0.62, 0.67], // L15
-  [0.43, 0.7], // L16
-  [0.46, 0.79], // L17
-  [0.5, 0.86], // L18
-  [0.59, 0.88], // L19
-  [0.58, 0.96], // L20
+  [0.48, 0.96], // L1  — path bottom entry (center-right)
+  [0.5, 0.9], // L2  — slight right curve
+  [0.5, 0.84], // L3  — continuing right
+  [0.46, 0.78], // L4  — eases left (bridge approach)
+  [0.44, 0.72], // L5  — center-left, bridge crossing
+  [0.46, 0.66], // L6  — back to center
+  [0.49, 0.6], // L7  — gentle right
+  [0.51, 0.55], // L8  — center-right, path widens
+  [0.5, 0.5], // L9  — center
+  [0.46, 0.47], // L10 — boss, centered on path
+  [0.44, 0.43], // L11 — center, easing left toward cave
+  [0.43, 0.38], // L12 — center-left, cave area
+  [0.43, 0.32], // L13 — center-left, above cave
+  [0.45, 0.27], // L14 — back to center
+  [0.44, 0.22], // L15 — center
+  [0.49, 0.18], // L16 — path curves right (upper S-curve)
+  [0.52, 0.14], // L17 — right of center
+  [0.5, 0.1], // L18 — easing left
+  [0.46, 0.07], // L19 — center-left near top
+  [0.43, 0.04], // L20 — boss, top of path near Roxy
 ];
 
 const PATH_LANDSCAPE = offsetFromRoad(ROAD_CENTER_LANDSCAPE);
@@ -89,14 +91,16 @@ const DEBUG_MODE = typeof location !== 'undefined' && new URLSearchParams(locati
 export class LevelSelect extends Container {
   onLevelChosen: ((levelId: number) => void) | null = null;
   private bgTextures: { landscape: Texture; portrait: Texture } | null = null;
+  private mushroomTexture: Texture | null = null;
 
   constructor(private player: PlayerState) {
     super();
     this.build();
   }
 
-  setBgTextures(textures: { landscape: Texture; portrait: Texture }): void {
+  setBgTextures(textures: { landscape: Texture; portrait: Texture }, mushroomTexture?: Texture): void {
     this.bgTextures = textures;
+    if (mushroomTexture) this.mushroomTexture = mushroomTexture;
     this.removeChildren();
     this.build();
   }
@@ -134,13 +138,13 @@ export class LevelSelect extends Container {
       this.buildDebugEditor(w, h, isPortrait);
     } else {
       // Normal game mode
-      this.buildNormalMap(w, h, isPortrait);
+      this.buildNormalMap(w, h, isPortrait, this.mushroomTexture);
     }
   }
 
   // ─── Normal (non-debug) map ───────────────────────────────────────
 
-  private buildNormalMap(w: number, h: number, isPortrait: boolean): void {
+  private buildNormalMap(w: number, h: number, isPortrait: boolean, mushroomTexture: Texture | null = null): void {
     const path = isPortrait ? PATH_PORTRAIT : PATH_LANDSCAPE;
 
     this.drawPathLine(path, w, h);
@@ -175,8 +179,8 @@ export class LevelSelect extends Container {
     }
 
     // Level nodes
-    const nodeSize = isPortrait ? 40 : 44;
-    const bossSize = isPortrait ? 50 : 54;
+    const nodeSize = isPortrait ? 36 : 40;
+    const bossSize = isPortrait ? 46 : 50;
 
     for (let i = 0; i < LevelConfigs.length && i < path.length; i++) {
       const level = LevelConfigs[i];
@@ -190,44 +194,93 @@ export class LevelSelect extends Container {
       btn.x = nx * w;
       btn.y = ny * h;
 
-      const circle = new Graphics();
-      const radius = size / 2;
+      if (mushroomTexture) {
+        // Use mushroom sprite as the node icon; tint locked levels gray
+        const mushroom = new Sprite(mushroomTexture);
+        mushroom.anchor.set(0.5);
+        const spriteSize = size * 1.1;
+        mushroom.width = spriteSize;
+        mushroom.height = spriteSize;
+        if (!unlocked) mushroom.tint = 0x444444;
+        else if (isBoss) mushroom.tint = 0xffd700;
+        btn.addChild(mushroom);
 
-      if (unlocked) {
-        circle.circle(0, 0, radius + 4);
-        circle.fill({ color: stars > 0 ? 0x9b59b6 : 0x5b3a8a, alpha: 0.4 });
-        circle.circle(0, 0, radius);
-        circle.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a, alpha: 0.92 });
-        circle.stroke({ color: isBoss ? 0xf1c40f : 0x9b59b6, width: isBoss ? 3 : 2 });
-      } else {
-        circle.circle(0, 0, radius);
-        circle.fill({ color: 0x111111, alpha: 0.7 });
-        circle.stroke({ color: 0x333333, width: 1.5 });
-      }
-      btn.addChild(circle);
+        // Hit area matching sprite bounds
+        btn.hitArea = new Rectangle(-spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
 
-      const numText = new Text({
-        text: String(level.id),
-        style: new TextStyle({
-          fontSize: isBoss ? 22 : 18,
-          fill: unlocked ? 0xffffff : 0x555555,
-          fontWeight: 'bold',
-          fontFamily: 'Segoe UI, sans-serif',
-          dropShadow: unlocked ? { color: 0x000000, distance: 1, alpha: 0.5 } : undefined,
-        }),
-      });
-      numText.anchor.set(0.5);
-      numText.y = stars > 0 ? -4 : 0;
-      btn.addChild(numText);
+        // Badge background over the wooden sign to cover the artwork's default number
+        const badgeX = spriteSize * 0.14;
+        const badgeY = spriteSize * 0.06;
+        const badgeBg = new Graphics();
+        badgeBg.roundRect(badgeX - 8, badgeY - 7, 16, 13, 3);
+        badgeBg.fill({ color: unlocked ? 0x7a3b0a : 0x333333, alpha: 0.85 });
+        btn.addChild(badgeBg);
 
-      if (stars > 0) {
-        const starsText = new Text({
-          text: '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars),
-          style: new TextStyle({ fontSize: 10, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+        // Level number placed over the wooden sign (right side of mushroom icon)
+        const numText = new Text({
+          text: String(level.id),
+          style: new TextStyle({
+            fontSize: isBoss ? 13 : 11,
+            fill: unlocked ? 0xffe8a0 : 0x888888,
+            fontWeight: 'bold',
+            fontFamily: 'Segoe UI, sans-serif',
+          }),
         });
-        starsText.anchor.set(0.5);
-        starsText.y = 10;
-        btn.addChild(starsText);
+        numText.anchor.set(0.5);
+        numText.x = badgeX;
+        numText.y = badgeY;
+        btn.addChild(numText);
+
+        if (stars > 0) {
+          const starsText = new Text({
+            text: '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars),
+            style: new TextStyle({ fontSize: 9, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+          });
+          starsText.anchor.set(0.5);
+          starsText.y = spriteSize * 0.47;
+          btn.addChild(starsText);
+        }
+      } else {
+        // Fallback: circle node
+        const circle = new Graphics();
+        const radius = size / 2;
+
+        if (unlocked) {
+          circle.circle(0, 0, radius + 4);
+          circle.fill({ color: stars > 0 ? 0x9b59b6 : 0x5b3a8a, alpha: 0.4 });
+          circle.circle(0, 0, radius);
+          circle.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a, alpha: 0.92 });
+          circle.stroke({ color: isBoss ? 0xf1c40f : 0x9b59b6, width: isBoss ? 3 : 2 });
+        } else {
+          circle.circle(0, 0, radius);
+          circle.fill({ color: 0x111111, alpha: 0.7 });
+          circle.stroke({ color: 0x333333, width: 1.5 });
+        }
+        btn.addChild(circle);
+
+        const numText = new Text({
+          text: String(level.id),
+          style: new TextStyle({
+            fontSize: isBoss ? 22 : 18,
+            fill: unlocked ? 0xffffff : 0x555555,
+            fontWeight: 'bold',
+            fontFamily: 'Segoe UI, sans-serif',
+            dropShadow: unlocked ? { color: 0x000000, distance: 1, alpha: 0.5 } : undefined,
+          }),
+        });
+        numText.anchor.set(0.5);
+        numText.y = stars > 0 ? -4 : 0;
+        btn.addChild(numText);
+
+        if (stars > 0) {
+          const starsText = new Text({
+            text: '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars),
+            style: new TextStyle({ fontSize: 10, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+          });
+          starsText.anchor.set(0.5);
+          starsText.y = 10;
+          btn.addChild(starsText);
+        }
       }
 
       if (unlocked) {

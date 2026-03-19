@@ -5,6 +5,7 @@ import levelSelectBgLandscapeUrl from '@/assets/sprites/levelselect-bg-landscape
 import levelSelectBgPortraitUrl from '@/assets/sprites/levelselect-bg-portrait.png';
 import gameBgLandscapeUrl from '@/assets/sprites/game-bg-landscape.png';
 import gameBgPortraitUrl from '@/assets/sprites/game-bg-portrait.png';
+import mushroomLevelUrl from '@/assets/sprites/mushroom-level.png';
 import { GameConfig } from '@/config/GameConfig';
 import { loadSymbolTextures } from '@/config/SymbolTextures';
 import { getLevelConfig } from '@/config/LevelConfig';
@@ -98,18 +99,22 @@ export class Game {
     this.showScene('menu');
   }
 
+  private mushroomLevelTexture!: Texture;
+
   private async loadAssets(): Promise<void> {
-    const [menuL, menuP, lsL, lsP, gameL, gameP] = await Promise.all([
+    const [menuL, menuP, lsL, lsP, gameL, gameP, mushroomTex] = await Promise.all([
       Assets.load<Texture>(menuBgLandscapeUrl),
       Assets.load<Texture>(menuBgPortraitUrl),
       Assets.load<Texture>(levelSelectBgLandscapeUrl),
       Assets.load<Texture>(levelSelectBgPortraitUrl),
       Assets.load<Texture>(gameBgLandscapeUrl),
       Assets.load<Texture>(gameBgPortraitUrl),
+      Assets.load<Texture>(mushroomLevelUrl),
     ]);
     this.menuBgTextures = { landscape: menuL, portrait: menuP };
     this.levelSelectBgTextures = { landscape: lsL, portrait: lsP };
     this.gameBgTextures = { landscape: gameL, portrait: gameP };
+    this.mushroomLevelTexture = mushroomTex;
 
     // Load symbol sprite textures
     await loadSymbolTextures();
@@ -127,7 +132,7 @@ export class Game {
 
   private buildLevelSelectScene(): void {
     this.levelSelectScene = new LevelSelect(this.player);
-    this.levelSelectScene.setBgTextures(this.levelSelectBgTextures);
+    this.levelSelectScene.setBgTextures(this.levelSelectBgTextures, this.mushroomLevelTexture);
     this.levelSelectScene.visible = false;
     this.levelSelectScene.onLevelChosen = (levelId) => {
       this.sfx.play('buttonPress');
@@ -369,6 +374,7 @@ export class Game {
     this.fsm.transition('SPINNING');
     this.spinButton.setEnabled(false);
     this.spinButton.setText('SPINNING...');
+    this.spinButton.setRespinStyle(false);
     this.sfx.play('reelSpin');
 
     // Schedule per-column reel-stop thuds
@@ -496,11 +502,17 @@ export class Game {
       this.updateGoalProgress();
 
       // Play match SFX based on biggest match size
+      const effects = this.slotGrid.getEffects();
       for (const match of matches) {
         const len = match.cells.length;
         if (len >= 5) this.sfx.play('match5');
         else if (len >= 4) this.sfx.play('match4');
         else this.sfx.play('match3');
+
+        // Show match word label above the center of the matched group
+        const midCell = match.cells[Math.floor(match.cells.length / 2)];
+        const midPos = this.slotGrid.getCellPosition(midCell.row, midCell.col);
+        if (midPos) effects.showMatchWord(midPos.x, midPos.y, len);
       }
       this.sfx.play('confetti');
 
@@ -624,6 +636,12 @@ export class Game {
         effects.showFloatingScore(pos.x, pos.y, result.score);
         effects.spawnConfetti([pos], 0xf1c40f);
       }
+      // Show match word label for each matched group
+      for (const match of result.matches) {
+        const midCell = match.cells[Math.floor(match.cells.length / 2)];
+        const midPos = this.slotGrid.getCellPosition(midCell.row, midCell.col);
+        if (midPos) effects.showMatchWord(midPos.x, midPos.y, match.cells.length);
+      }
     }
 
     // Update grid visual with gravity animation
@@ -674,6 +692,7 @@ export class Game {
       this.sfx.play('invalidSwap');
       this.spinButton.setEnabled(true);
       this.spinButton.setText('SPIN');
+      this.spinButton.setRespinStyle(true);
       this.spinButton.playAttention();
     } else {
       // No spins and no moves — end the match phase
@@ -727,10 +746,13 @@ export class Game {
     if (powerUpType === 'blast' && originPos) {
       const isRow = result.cleared.every((c) => c.row === row);
       effects.showBlastEffect(clearedPositions, isRow);
+      effects.showMatchWord(originPos.x, originPos.y - 40, 0, 'blast');
     } else if (powerUpType === 'bomb' && originPos) {
       effects.showBombEffect(originPos.x, originPos.y);
+      effects.showMatchWord(originPos.x, originPos.y - 40, 0, 'bomb');
     } else if (powerUpType === 'rainbow') {
       effects.showRainbowEffect(clearedPositions);
+      if (originPos) effects.showMatchWord(originPos.x, originPos.y - 40, 0, 'rainbow');
     }
 
     // Costs 1 move only if player still has moves; free when moves are depleted

@@ -3,9 +3,15 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "/Users/eb/Documents/Projects/KefSlot/node_modules/.bin/vite",
-      "runtimeArgs": ["--port", "3005"],
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd /Users/db/repos/KefSensei/kefslot && /opt/homebrew/bin/node node_modules/.bin/vite --port 3005"],
       "port": 3005
+    },
+    {
+      "name": "kefsensei-studio",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "cd /Users/db/repos/KefSensei/kefsensei-studio && /opt/homebrew/bin/node node_modules/.bin/astro dev --port 4321"],
+      "port": 4321
     }
   ]
 }
