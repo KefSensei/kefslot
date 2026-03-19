@@ -1,5 +1,12 @@
-import { Application, Container, Graphics, Text, TextStyle, FillGradient } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle, FillGradient, Sprite, Texture, Assets } from 'pixi.js';
+import menuBgLandscapeUrl from '@/assets/sprites/menu-bg-landscape.png';
+import menuBgPortraitUrl from '@/assets/sprites/menu-bg-portrait.png';
+import levelSelectBgLandscapeUrl from '@/assets/sprites/levelselect-bg-landscape.png';
+import levelSelectBgPortraitUrl from '@/assets/sprites/levelselect-bg-portrait.png';
+import gameBgLandscapeUrl from '@/assets/sprites/game-bg-landscape.png';
+import gameBgPortraitUrl from '@/assets/sprites/game-bg-portrait.png';
 import { GameConfig } from '@/config/GameConfig';
+import { loadSymbolTextures } from '@/config/SymbolTextures';
 import { getLevelConfig } from '@/config/LevelConfig';
 import { StateMachine, GameState } from '@/core/StateMachine';
 import { events } from '@/core/EventBus';
@@ -12,11 +19,15 @@ import { HUD } from '@/ui/HUD';
 import { SpinButton } from '@/ui/SpinButton';
 import { LevelSelect } from '@/ui/LevelSelect';
 import { LevelComplete } from '@/ui/LevelComplete';
+import { LevelIntro } from '@/ui/LevelIntro';
+import { MenuScreen } from '@/ui/MenuScreen';
 import { delay, weightedRandom } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell } from '@/models/Symbol';
+import { Howler } from 'howler';
 import gsap from 'gsap';
 import { MusicManager } from '@/audio/MusicManager';
+import { SFXManager } from '@/audio/SFXManager';
 
 export class Game {
   private app: Application;
@@ -27,9 +38,10 @@ export class Game {
   private cascade = new CascadeEngine();
   private match3 = new Match3Engine();
   private music = new MusicManager();
+  private sfx = new SFXManager();
 
   // Scenes
-  private menuScene = new Container();
+  private menuScreen!: MenuScreen;
   private levelSelectScene!: LevelSelect;
   private gameScene = new Container();
 
@@ -38,7 +50,22 @@ export class Game {
   private hud!: HUD;
   private spinButton!: SpinButton;
   private levelComplete!: LevelComplete;
+  private levelIntro!: LevelIntro;
   private goalDisplay!: Container;
+
+  // Layout references for relayout
+  private gameBg!: Sprite;
+  private gameTopGrad!: Graphics;
+  private gameAmbientGlow!: Graphics;
+  private gameHeader!: Text;
+  private _isPortrait: boolean | null = null; // null = not yet laid out
+
+  // Background textures
+  private menuBgTextures!: { landscape: Texture; portrait: Texture };
+  private levelSelectBgTextures!: { landscape: Texture; portrait: Texture };
+  private gameBgTextures!: { landscape: Texture; portrait: Texture };
+
+  // (Menu UI is now handled by MenuScreen class)
 
   // Game state
   private currentLevelDef: LevelDef | null = null;
@@ -49,14 +76,18 @@ export class Game {
   private powerUpCount = 0;
   private goals: LevelGoal[] = [];
   private collectCounts: Record<string, number> = {};
+  private blockersCleared = 0;
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(app: Application) {
     this.app = app;
-    this.init();
   }
 
-  private init(): void {
+  /** Must be called after construction and before first resize */
+  async init(): Promise<void> {
+    // Preload image assets
+    await this.loadAssets();
+
     this.buildMenuScene();
     this.buildLevelSelectScene();
     this.buildGameScene();
@@ -67,173 +98,118 @@ export class Game {
     this.showScene('menu');
   }
 
+  private async loadAssets(): Promise<void> {
+    const [menuL, menuP, lsL, lsP, gameL, gameP] = await Promise.all([
+      Assets.load<Texture>(menuBgLandscapeUrl),
+      Assets.load<Texture>(menuBgPortraitUrl),
+      Assets.load<Texture>(levelSelectBgLandscapeUrl),
+      Assets.load<Texture>(levelSelectBgPortraitUrl),
+      Assets.load<Texture>(gameBgLandscapeUrl),
+      Assets.load<Texture>(gameBgPortraitUrl),
+    ]);
+    this.menuBgTextures = { landscape: menuL, portrait: menuP };
+    this.levelSelectBgTextures = { landscape: lsL, portrait: lsP };
+    this.gameBgTextures = { landscape: gameL, portrait: gameP };
+
+    // Load symbol sprite textures
+    await loadSymbolTextures();
+  }
+
   private buildMenuScene(): void {
-    // Gradient background
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x1a0a2e });
-    this.menuScene.addChild(bg);
-
-    // Ambient glow behind center
-    const glow = new Graphics();
-    glow.circle(GameConfig.width / 2, 350, 250);
-    glow.fill({ color: 0x9b59b6, alpha: 0.1 });
-    this.menuScene.addChild(glow);
-
-    // Title
-    const title = new Text({
-      text: "Roxy's\nMagic Reels",
-      style: new TextStyle({
-        fontSize: 48,
-        fill: 0xf1c40f,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        align: 'center',
-        lineHeight: 56,
-        dropShadow: {
-          color: 0x9b59b6,
-          distance: 3,
-          alpha: 1,
-        },
-      }),
-    });
-    title.anchor.set(0.5);
-    title.x = GameConfig.width / 2;
-    title.y = 180;
-    this.menuScene.addChild(title);
-
-    // Subtitle
-    const sub = new Text({
-      text: 'A Slot + Match-3 Adventure',
-      style: new TextStyle({ fontSize: 18, fill: 0xb0a0c0, fontFamily: 'Segoe UI, sans-serif' }),
-    });
-    sub.anchor.set(0.5);
-    sub.x = GameConfig.width / 2;
-    sub.y = 260;
-    this.menuScene.addChild(sub);
-
-    // Roxy placeholder (simple character)
-    const roxy = new Graphics();
-    // Body
-    roxy.circle(GameConfig.width / 2, 360, 30);
-    roxy.fill({ color: 0xf39c12 });
-    // Hat
-    roxy.moveTo(GameConfig.width / 2 - 25, 335);
-    roxy.lineTo(GameConfig.width / 2, 295);
-    roxy.lineTo(GameConfig.width / 2 + 25, 335);
-    roxy.closePath();
-    roxy.fill({ color: 0x9b59b6 });
-    // Eyes
-    roxy.circle(GameConfig.width / 2 - 10, 355, 4);
-    roxy.circle(GameConfig.width / 2 + 10, 355, 4);
-    roxy.fill({ color: 0x000000 });
-    // Smile
-    roxy.arc(GameConfig.width / 2, 365, 10, 0, Math.PI);
-    roxy.stroke({ color: 0x000000, width: 2 });
-    this.menuScene.addChild(roxy);
-
-    // Play button
-    const playBtn = new Container();
-    playBtn.x = GameConfig.width / 2;
-    playBtn.y = 460;
-    const playBg = new Graphics();
-    playBg.roundRect(-90, -30, 180, 60, 30);
-    playBg.fill({ color: 0x9b59b6 });
-    playBg.stroke({ color: 0xf1c40f, width: 3 });
-    playBtn.addChild(playBg);
-
-    const playText = new Text({
-      text: 'PLAY',
-      style: new TextStyle({ fontSize: 26, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'Segoe UI, sans-serif', letterSpacing: 6 }),
-    });
-    playText.anchor.set(0.5);
-    playBtn.addChild(playText);
-
-    playBtn.eventMode = 'static';
-    playBtn.cursor = 'pointer';
-    playBtn.on('pointerdown', () => {
+    this.menuScreen = new MenuScreen(this.menuBgTextures);
+    this.menuScreen.onPlay = () => {
+      this.sfx.play('buttonPress');
       this.music.load();
       this.fsm.transition('LEVEL_SELECT');
-    });
-    this.menuScene.addChild(playBtn);
-
-    // Starfield on menu
-    this.addStarfield(this.menuScene);
-
-    this.app.stage.addChild(this.menuScene);
+    };
+    this.app.stage.addChild(this.menuScreen);
   }
 
   private buildLevelSelectScene(): void {
     this.levelSelectScene = new LevelSelect(this.player);
+    this.levelSelectScene.setBgTextures(this.levelSelectBgTextures);
     this.levelSelectScene.visible = false;
     this.levelSelectScene.onLevelChosen = (levelId) => {
+      this.sfx.play('buttonPress');
       this.startLevel(levelId);
     };
     this.app.stage.addChild(this.levelSelectScene);
   }
 
   private buildGameScene(): void {
-    // Gradient background (dark purple → near-black)
-    const bg = new Graphics();
-    bg.rect(0, 0, GameConfig.width, GameConfig.height);
-    bg.fill({ color: 0x0d0520 });
-    this.gameScene.addChild(bg);
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
+    const isPortrait = GameConfig.isPortrait;
 
-    // Upper gradient overlay (lighter purple fade)
-    const topGrad = new Graphics();
-    topGrad.rect(0, 0, GameConfig.width, 200);
-    topGrad.fill({ color: 0x2a1050, alpha: 0.4 });
-    this.gameScene.addChild(topGrad);
+    // Background image (slot cabinet art)
+    this.gameBg = new Sprite(isPortrait ? this.gameBgTextures.portrait : this.gameBgTextures.landscape);
+    this.gameBg.width = w;
+    this.gameBg.height = h;
+    this.gameScene.addChild(this.gameBg);
 
-    // Ambient glow behind slot machine
-    const ambientGlow = new Graphics();
-    ambientGlow.circle(GameConfig.width / 2, GameConfig.height / 2 - 20, 280);
-    ambientGlow.fill({ color: 0x9b59b6, alpha: 0.12 });
-    this.gameScene.addChild(ambientGlow);
-
-    // Starfield
-    this.addStarfield(this.gameScene);
+    // Keep these for compatibility but make them invisible (art provides the atmosphere now)
+    this.gameTopGrad = new Graphics();
+    this.gameAmbientGlow = new Graphics();
 
     // Header plate: "ROXY'S MAGIC REELS"
-    const header = new Text({
+    this.gameHeader = new Text({
       text: "ROXY'S MAGIC REELS",
       style: new TextStyle({
         fontSize: 20,
-        fill: 0xF5D060,
+        fill: 0xf5d060,
         fontWeight: 'bold',
         fontFamily: 'Segoe UI, sans-serif',
         letterSpacing: 4,
         dropShadow: { color: 0x000000, distance: 2, alpha: 0.5 },
       }),
     });
-    header.anchor.set(0.5);
-    header.x = GameConfig.width / 2;
-    header.y = 78;
-    this.gameScene.addChild(header);
+    this.gameHeader.anchor.set(0.5);
+    this.gameHeader.x = w / 2;
+    this.gameHeader.y = 45;
+    this.gameHeader.visible = !isPortrait;
+    this.gameScene.addChild(this.gameHeader);
 
     // HUD
     this.hud = new HUD();
+    this.hud.setMusicMuted(this.player.musicMuted);
+    Howler.mute(this.player.musicMuted);
+    this.hud.setSfxMuted(this.sfx.muted);
+    if (isPortrait) this.hud.setPortrait(true);
+    this.hud.onMusicToggle = (muted) => {
+      this.player.setMusicMuted(muted);
+      Howler.mute(muted);
+    };
+    this.hud.onSfxToggle = (muted) => {
+      this.sfx.setMuted(muted);
+    };
     this.gameScene.addChild(this.hud);
 
-    // Slot Grid
+    // Slot Grid — position to match cabinet screen area
+    const gridCenter = isPortrait ? GameConfig.gridCenterPortrait : GameConfig.gridCenterLandscape;
     this.slotGrid = new SlotGrid();
-    this.slotGrid.x = GameConfig.width / 2;
-    this.slotGrid.y = GameConfig.height / 2 - 20;
+    this.slotGrid.x = gridCenter.x;
+    this.slotGrid.y = gridCenter.y;
     this.slotGrid.onSwapAttempt = (r1, c1, r2, c2) => this.handleSwap(r1, c1, r2, c2);
+    this.slotGrid.onPowerUpTap = (r, c) => this.handlePowerUpActivation(r, c);
     this.gameScene.addChild(this.slotGrid);
 
-    // Spin Button
+    // Spin Button — sits on the wooden shelf below the screen
     this.spinButton = new SpinButton();
-    this.spinButton.x = GameConfig.width / 2;
-    this.spinButton.y = GameConfig.height - 45;
+    this.spinButton.x = w / 2;
+    this.spinButton.y = isPortrait ? h * 0.82 : h * 0.78;
+    if (isPortrait) this.spinButton.setPortrait(true);
     this.spinButton.onSpin = () => this.handleSpin();
     this.gameScene.addChild(this.spinButton);
 
-    // Goal display
+    // Goal display — just above spin button
     this.goalDisplay = new Container();
-    this.goalDisplay.x = GameConfig.width / 2;
-    this.goalDisplay.y = GameConfig.height - 90;
+    this.goalDisplay.x = w / 2;
+    this.goalDisplay.y = isPortrait ? h * 0.76 : h * 0.72;
     this.gameScene.addChild(this.goalDisplay);
+
+    // Level Intro overlay
+    this.levelIntro = new LevelIntro();
+    this.gameScene.addChild(this.levelIntro);
 
     // Level Complete overlay
     this.levelComplete = new LevelComplete();
@@ -243,43 +219,68 @@ export class Game {
     this.app.stage.addChild(this.gameScene);
   }
 
-  /** Add floating starfield particles to a scene */
-  private addStarfield(scene: Container): void {
-    for (let i = 0; i < 30; i++) {
-      const star = new Graphics();
-      const size = 1 + Math.random() * 2;
-      star.circle(0, 0, size);
-      star.fill({ color: 0xffffff, alpha: 0.1 + Math.random() * 0.3 });
-      star.x = Math.random() * GameConfig.width;
-      star.y = Math.random() * GameConfig.height;
-      scene.addChildAt(star, Math.min(scene.children.length, 3));
+  /** Reposition all game elements for portrait or landscape layout */
+  relayout(isPortrait: boolean): void {
+    if (this._isPortrait === isPortrait) return;
+    this._isPortrait = isPortrait;
 
-      // Twinkle
-      gsap.to(star, {
-        alpha: 0.1 + Math.random() * 0.5,
-        duration: 2 + Math.random() * 3,
-        yoyo: true,
-        repeat: -1,
-        ease: 'sine.inOut',
-        delay: Math.random() * 4,
-      });
+    const w = GameConfig.activeWidth;
+    const h = GameConfig.activeHeight;
 
-      // Slow drift
-      gsap.to(star, {
-        y: star.y + 20 + Math.random() * 30,
-        duration: 8 + Math.random() * 6,
-        yoyo: true,
-        repeat: -1,
-        ease: 'sine.inOut',
-      });
+    // Swap game background texture for orientation
+    this.gameBg.texture = isPortrait ? this.gameBgTextures.portrait : this.gameBgTextures.landscape;
+    this.gameBg.width = w;
+    this.gameBg.height = h;
+
+    // Header
+    if (isPortrait) {
+      this.gameHeader.visible = false; // hide in portrait to save space
+    } else {
+      this.gameHeader.visible = true;
+      this.gameHeader.x = w / 2;
+      this.gameHeader.y = 45;
     }
+
+    // Grid — position to match cabinet screen area
+    const gridCenter = isPortrait ? GameConfig.gridCenterPortrait : GameConfig.gridCenterLandscape;
+    this.slotGrid.x = gridCenter.x;
+    this.slotGrid.y = gridCenter.y;
+    // Re-render grid with new cell size
+    this.slotGrid.renderGrid();
+
+    // Spin button — sits on the wooden shelf
+    this.spinButton.x = w / 2;
+    this.spinButton.y = isPortrait ? h * 0.82 : h * 0.78;
+    this.spinButton.setPortrait(isPortrait);
+
+    // Goal display — just above spin button
+    this.goalDisplay.x = w / 2;
+    this.goalDisplay.y = isPortrait ? h * 0.76 : h * 0.72;
+
+    // HUD
+    this.hud.setPortrait(isPortrait);
+
+    // Overlays — reposition panel centers
+    this.levelIntro.relayout(w, h);
+    this.levelComplete.relayout(w, h);
+
+    // Menu screen
+    this.menuScreen.relayout(isPortrait);
+
+    // Level select uses activeWidth/activeHeight in build(), so refresh it
+    this.levelSelectScene?.refresh();
   }
 
+  // (Starfield is now part of MenuScreen)
+
   private showScene(scene: 'menu' | 'levelSelect' | 'game'): void {
-    this.menuScene.visible = scene === 'menu';
+    this.menuScreen.visible = scene === 'menu';
     this.levelSelectScene.visible = scene === 'levelSelect';
     this.gameScene.visible = scene === 'game';
 
+    if (scene === 'menu') {
+      this.menuScreen.playEntrance();
+    }
     if (scene === 'levelSelect') {
       this.levelSelectScene.refresh();
     }
@@ -304,15 +305,18 @@ export class Game {
         break;
       case 'MATCH3_PHASE':
         this.slotGrid.setInteractive(true);
-        this.spinButton.setEnabled(false);
+        this.spinButton.setEnabled(this.spinsRemaining > 0);
         this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
         this.hud.showMessage('Drag to swap symbols!', 2000);
         this.startHintTimer();
+        this.slotGrid.startPowerUpGlow();
+        // Check for dead board (no valid swaps)
+        this.checkForDeadBoard();
         break;
     }
   }
 
-  private startLevel(levelId: number): void {
+  private async startLevel(levelId: number): Promise<void> {
     const def = getLevelConfig(levelId);
     if (!def) return;
 
@@ -322,8 +326,9 @@ export class Game {
     this.totalScore = 0;
     this.cascadeCount = 0;
     this.powerUpCount = 0;
+    this.blockersCleared = 0;
     this.collectCounts = {};
-    this.goals = def.goals.map(g => ({ ...g, current: 0 }));
+    this.goals = def.goals.map((g) => ({ ...g, current: 0 }));
 
     this.hud.setLevel(def.id);
     this.hud.setScore(0);
@@ -335,21 +340,27 @@ export class Game {
     // Start music (lead vocals only, stems layer in as score grows)
     this.music.start();
 
-    // Generate initial grid
+    // Generate a placeholder grid (will be replaced by auto-spin)
     this.match3.setLevel(levelId);
     const gridData = this.slotGrid.generateGrid(levelId);
     this.match3.setGrid(gridData);
 
-    // Transition to game
-    if (this.fsm.state === 'LEVEL_SELECT') {
-      this.fsm.transition('IDLE');
-    } else if (this.fsm.state === 'LEVEL_CHECK') {
-      this.fsm.transition('IDLE');
+    // Show game scene before intro so it's visible behind the overlay
+    this.showScene('game');
+
+    // Show level intro overlay if configured
+    if (def.intro) {
+      this.sfx.play('levelIntro');
+      await this.levelIntro.show(def.intro);
     }
+
+    // Auto-spin the first reel immediately — player gets right into the action
+    this.autoSpin();
   }
 
-  private async handleSpin(): Promise<void> {
-    if (this.fsm.state !== 'IDLE' || this.spinsRemaining <= 0) return;
+  /** Perform an automatic spin (used for first spin on level start) */
+  private async autoSpin(): Promise<void> {
+    if (this.spinsRemaining <= 0) return;
 
     this.spinsRemaining--;
     this.movesRemaining = this.currentLevelDef!.movesPerSpin;
@@ -357,16 +368,80 @@ export class Game {
 
     this.fsm.transition('SPINNING');
     this.spinButton.setEnabled(false);
+    this.spinButton.setText('SPINNING...');
+    this.sfx.play('reelSpin');
+
+    // Schedule per-column reel-stop thuds
+    for (let c = 0; c < GameConfig.cols; c++) {
+      setTimeout(() => this.sfx.play('reelStop', { pitch: -c }), 500 + c * 200);
+    }
+
+    try {
+      await this.slotGrid.animateReelSpin(() => {
+        const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+        if (this.currentLevelDef!.hasBlockers) {
+          this.placeBlockers(gridData, this.currentLevelDef!);
+        }
+        this.match3.setGrid(gridData);
+      });
+    } catch (err) {
+      console.error('Auto-spin error:', err);
+      const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+      if (this.currentLevelDef!.hasBlockers) {
+        this.placeBlockers(gridData, this.currentLevelDef!);
+      }
+      this.match3.setGrid(gridData);
+    }
+
+    // Cascade resolve phase
+    this.fsm.transition('CASCADE_RESOLVE');
+    await this.resolveCascades();
+
+    // Into match-3 phase
+    this.fsm.transition('MATCH3_PHASE');
+  }
+
+  private async handleSpin(): Promise<void> {
+    if (this.spinsRemaining <= 0) return;
+    if (this.fsm.state !== 'IDLE' && this.fsm.state !== 'MATCH3_PHASE') return;
+
+    // If re-spinning from MATCH3_PHASE, clean up match phase state
+    if (this.fsm.state === 'MATCH3_PHASE') {
+      this.clearHintTimer();
+      this.slotGrid.clearHint();
+      this.slotGrid.stopPowerUpGlow();
+      this.slotGrid.setInteractive(false);
+    }
+
+    this.spinsRemaining--;
+    this.movesRemaining = this.currentLevelDef!.movesPerSpin;
+    this.hud.setMoves(this.movesRemaining);
+
+    this.fsm.transition('SPINNING');
+    this.spinButton.setEnabled(false);
+    this.sfx.play('reelSpin');
+
+    // Schedule per-column reel-stop thuds to align with bounce-in timing
+    for (let c = 0; c < GameConfig.cols; c++) {
+      setTimeout(() => this.sfx.play('reelStop', { pitch: -c }), 500 + c * 200);
+    }
 
     try {
       // Unified reel spin: scroll down old, generate new, scroll in new
       await this.slotGrid.animateReelSpin(() => {
         const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+        // Place blockers on every spin so the mechanic persists
+        if (this.currentLevelDef!.hasBlockers) {
+          this.placeBlockers(gridData, this.currentLevelDef!);
+        }
         this.match3.setGrid(gridData);
       });
     } catch (err) {
       console.error('Spin error:', err);
       const gridData = this.slotGrid.generateGrid(this.currentLevelDef!.id);
+      if (this.currentLevelDef!.hasBlockers) {
+        this.placeBlockers(gridData, this.currentLevelDef!);
+      }
       this.match3.setGrid(gridData);
     }
 
@@ -380,7 +455,7 @@ export class Game {
 
   private async resolveCascades(): Promise<void> {
     let cascadeLevel = 0;
-    let grid = this.match3.getGrid();
+    const grid = this.match3.getGrid();
     let matches = this.cascade.findMatches(grid);
 
     if (matches.length > 0) {
@@ -391,15 +466,19 @@ export class Game {
     while (matches.length > 0) {
       const multiplier = this.cascade.getMultiplier(cascadeLevel);
       this.hud.setMultiplier(multiplier);
+      if (cascadeLevel > 0) {
+        this.sfx.play('multiplier');
+      }
 
       // Score matches
       let roundScore = 0;
       for (const match of matches) {
-        const baseScore = match.cells.length >= 5
-          ? GameConfig.match5Score
-          : match.cells.length >= 4
-            ? GameConfig.match4Score
-            : GameConfig.match3Score;
+        const baseScore =
+          match.cells.length >= 5
+            ? GameConfig.match5Score
+            : match.cells.length >= 4
+              ? GameConfig.match4Score
+              : GameConfig.match3Score;
         const score = baseScore * multiplier;
         roundScore += score;
         this.totalScore += score;
@@ -416,14 +495,38 @@ export class Game {
       this.hud.setScore(this.totalScore);
       this.updateGoalProgress();
 
+      // Play match SFX based on biggest match size
+      for (const match of matches) {
+        const len = match.cells.length;
+        if (len >= 5) this.sfx.play('match5');
+        else if (len >= 4) this.sfx.play('match4');
+        else this.sfx.play('match3');
+      }
+      this.sfx.play('confetti');
+
       // Animate clearing with confetti and floating score
-      const allCells = matches.flatMap(m => m.cells);
+      const allCells = matches.flatMap((m) => m.cells);
       await this.slotGrid.animateClear(allCells, roundScore);
 
       // Remove from data
       for (const pos of allCells) {
         grid[pos.row][pos.col] = null;
       }
+
+      // Damage adjacent blockers
+      const blockerResult = this.match3.damageAdjacentBlockers(allCells);
+      this.blockersCleared += blockerResult.destroyed.length;
+      for (const _pos of blockerResult.destroyed) {
+        this.sfx.play('blockerBreak');
+      }
+      for (const _pos of blockerResult.damaged) {
+        this.sfx.play('blockerCrack');
+      }
+      // Remove destroyed blockers from grid
+      for (const pos of blockerResult.destroyed) {
+        grid[pos.row][pos.col] = null;
+      }
+      this.updateGoalProgress();
 
       // Gravity
       this.applyGravityToGrid(grid);
@@ -442,6 +545,7 @@ export class Game {
       if (matches.length > 0) {
         const effects = this.slotGrid.getEffects();
         effects.showCascadeBurst(0, 0, this.cascade.getMultiplier(cascadeLevel));
+        this.sfx.play('cascade', { cascadeLevel });
         this.hud.showMessage(`Cascade x${cascadeLevel + 1}!`, 1000);
         await delay(300);
       }
@@ -464,6 +568,7 @@ export class Game {
 
     if (!isValid) {
       // Animate invalid swap (bounce back)
+      this.sfx.play('invalidSwap');
       await this.slotGrid.animateInvalidSwap(r1, c1, r2, c2);
       this.hud.showMessage('No match!', 800);
       this.slotGrid.setInteractive(true);
@@ -471,6 +576,7 @@ export class Game {
     }
 
     // Animate the swap visually
+    this.sfx.play('swap');
     await this.slotGrid.animateSwap(r1, c1, r2, c2);
 
     // Execute the swap in the engine
@@ -485,6 +591,7 @@ export class Game {
     this.hud.setScore(this.totalScore);
     this.cascadeCount += result.cascades;
     this.powerUpCount += result.powerUpsCreated.length;
+    this.blockersCleared += result.blockersDestroyed;
 
     // Track collections from match-3 phase
     for (const match of result.matches) {
@@ -495,9 +602,22 @@ export class Game {
 
     this.updateGoalProgress();
 
+    // Play match SFX for swap results
+    for (const match of result.matches) {
+      const len = match.cells.length;
+      if (len >= 5) this.sfx.play('match5');
+      else if (len >= 4) this.sfx.play('match4');
+      else this.sfx.play('match3');
+    }
+    if (result.powerUpsCreated.length > 0) {
+      this.sfx.play('powerUpCreate');
+    }
+
     // Show confetti and score for match-3 swap results
     const grid = this.match3.getGrid();
     if (result.score > 0) {
+      this.sfx.play('scorePop');
+      this.sfx.play('confetti');
       const effects = this.slotGrid.getEffects();
       const pos = this.slotGrid.getCellPosition(r1, c1);
       if (pos) {
@@ -517,16 +637,220 @@ export class Game {
     this.slotGrid.setInteractive(true);
     this.startHintTimer();
 
+    // Update spin button to reflect remaining moves
+    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
-      await delay(500);
-      this.endMatchPhase();
+      // If power-ups remain, let the player activate them for free
+      if (this.hasPowerUpsOnBoard()) {
+        this.hud.showMessage('Tap power-ups to activate!', 2500);
+        this.spinButton.setText('TAP POWER-UPS!');
+        this.slotGrid.startPowerUpGlow();
+        // Keep grid interactive for power-up taps (swaps still blocked by movesRemaining check)
+      } else {
+        await delay(500);
+        this.endMatchPhase();
+      }
+    } else {
+      // Check for dead board after swap resolves
+      this.checkForDeadBoard();
+    }
+  }
+
+  private checkForDeadBoard(): void {
+    if (this.fsm.state !== 'MATCH3_PHASE') return;
+    const hint = this.match3.findHint();
+    if (hint) return; // Valid moves exist, all good
+
+    // No valid swaps on the board
+    this.slotGrid.setInteractive(false);
+    this.clearHintTimer();
+    this.slotGrid.clearHint();
+
+    if (this.spinsRemaining > 0) {
+      // Player can re-spin to get a new board
+      this.hud.showMessage('No moves available! Press SPIN', 3000);
+      this.sfx.play('invalidSwap');
+      this.spinButton.setEnabled(true);
+      this.spinButton.setText('SPIN');
+      this.spinButton.playAttention();
+    } else {
+      // No spins and no moves — end the match phase
+      this.hud.showMessage('No moves left!', 1500);
+      this.sfx.play('invalidSwap');
+      setTimeout(() => this.endMatchPhase(), 1500);
+    }
+  }
+
+  /** Check if any power-ups exist on the current board */
+  private hasPowerUpsOnBoard(): boolean {
+    const grid = this.match3.getGrid();
+    for (let r = 0; r < GameConfig.rows; r++) {
+      for (let c = 0; c < GameConfig.cols; c++) {
+        if (grid[r]?.[c]?.powerUp) return true;
+      }
+    }
+    return false;
+  }
+
+  private async handlePowerUpActivation(row: number, col: number): Promise<void> {
+    if (this.fsm.state !== 'MATCH3_PHASE') return;
+
+    const grid = this.match3.getGrid();
+    const cell = grid[row]?.[col];
+    if (!cell?.powerUp) return;
+
+    const powerUpType = cell.powerUp;
+
+    // Disable interaction during activation
+    this.slotGrid.setInteractive(false);
+    this.clearHintTimer();
+    this.slotGrid.clearHint();
+
+    this.sfx.play('powerUpActivate');
+
+    // Activate the power-up in the engine
+    const result = this.match3.activatePowerUp(row, col);
+    if (result.cleared.length === 0) {
+      this.slotGrid.setInteractive(true);
+      return;
+    }
+
+    // Show power-up activation effect
+    const effects = this.slotGrid.getEffects();
+    const clearedPositions = result.cleared
+      .map((p) => this.slotGrid.getCellPosition(p.row, p.col))
+      .filter((p): p is { x: number; y: number } => p !== null);
+    const originPos = this.slotGrid.getCellPosition(row, col);
+
+    if (powerUpType === 'blast' && originPos) {
+      const isRow = result.cleared.every((c) => c.row === row);
+      effects.showBlastEffect(clearedPositions, isRow);
+    } else if (powerUpType === 'bomb' && originPos) {
+      effects.showBombEffect(originPos.x, originPos.y);
+    } else if (powerUpType === 'rainbow') {
+      effects.showRainbowEffect(clearedPositions);
+    }
+
+    // Costs 1 move only if player still has moves; free when moves are depleted
+    if (this.movesRemaining > 0) {
+      this.movesRemaining--;
+      this.hud.setMoves(this.movesRemaining);
+      this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
+    }
+
+    // Track collections from cleared cells
+    for (const pos of result.cleared) {
+      const clearedCell = grid[pos.row]?.[pos.col]; // already null, but we tracked before
+    }
+
+    // Score
+    this.totalScore += result.score;
+    this.hud.setScore(this.totalScore);
+    this.powerUpCount++;
+
+    // Damage adjacent blockers
+    const blockerResult = this.match3.damageAdjacentBlockers(result.cleared);
+    this.blockersCleared += blockerResult.destroyed.length;
+    for (const pos of blockerResult.destroyed) {
+      this.sfx.play('blockerBreak');
+    }
+    for (const pos of blockerResult.damaged) {
+      this.sfx.play('blockerCrack');
+    }
+
+    this.updateGoalProgress();
+
+    // Animate clear
+    this.sfx.play('confetti');
+    await this.slotGrid.animateClear(result.cleared, result.score);
+
+    // Apply gravity and fill
+    const updatedGrid = this.match3.getGrid();
+    this.applyGravityToGrid(updatedGrid);
+    this.fillGridEmpty(updatedGrid);
+    this.match3.setGrid(updatedGrid);
+    await this.slotGrid.animateGravityDrop(updatedGrid);
+
+    // Resolve any cascades that form after gravity
+    await this.resolveCascades();
+
+    // Re-enable interaction
+    this.slotGrid.setInteractive(true);
+    this.startHintTimer();
+
+    this.spinButton.setText(this.movesRemaining > 0 ? `MOVES: ${this.movesRemaining}` : 'TAP POWER-UPS!');
+
+    // Check if moves depleted
+    if (this.movesRemaining <= 0) {
+      // If more power-ups remain on the board, let the player keep tapping
+      if (this.hasPowerUpsOnBoard()) {
+        this.hud.showMessage('Tap power-ups to activate!', 2000);
+        this.slotGrid.startPowerUpGlow();
+      } else {
+        await delay(500);
+        this.endMatchPhase();
+      }
+    } else {
+      this.checkForDeadBoard();
+    }
+  }
+
+  private placeBlockers(grid: (CellData | null)[][], def: import('@/models/Level').LevelDef): void {
+    // Build a list of blocker batches (primary + optional secondary type)
+    const batches: { count: number; health: number }[] = [];
+    const primaryCount = def.blockerCount ?? 0;
+    const primaryType = def.blockerType ?? 'ice';
+    if (primaryCount > 0) {
+      batches.push({ count: primaryCount, health: primaryType === 'ice' ? 1 : 2 });
+    }
+    const secondaryCount = def.blockerCountSecondary ?? 0;
+    const secondaryType = def.blockerTypeSecondary ?? 'ice';
+    if (secondaryCount > 0) {
+      batches.push({ count: secondaryCount, health: secondaryType === 'ice' ? 1 : 2 });
+    }
+
+    const totalCount = batches.reduce((s, b) => s + b.count, 0);
+    if (totalCount === 0) return;
+
+    // Collect valid positions (avoid corners for better gameplay)
+    const positions: { r: number; c: number }[] = [];
+    for (let r = 0; r < GameConfig.rows; r++) {
+      for (let c = 0; c < GameConfig.cols; c++) {
+        const isCorner = (r === 0 || r === GameConfig.rows - 1) && (c === 0 || c === GameConfig.cols - 1);
+        if (!isCorner && grid[r][c]) {
+          positions.push({ r, c });
+        }
+      }
+    }
+
+    // Shuffle
+    for (let i = positions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
+
+    // Place blockers from each batch sequentially
+    let idx = 0;
+    for (const batch of batches) {
+      const toPlace = Math.min(batch.count, positions.length - idx);
+      for (let i = 0; i < toPlace; i++) {
+        const { r, c } = positions[idx];
+        const cell = grid[r][c];
+        if (cell) {
+          cell.isBlocker = true;
+          cell.blockerHealth = batch.health;
+        }
+        idx++;
+      }
     }
   }
 
   private endMatchPhase(): void {
     this.clearHintTimer();
     this.slotGrid.clearHint();
+    this.slotGrid.stopPowerUpGlow();
     this.slotGrid.setInteractive(false);
     this.fsm.transition('SCORING');
 
@@ -539,19 +863,25 @@ export class Game {
   }
 
   private checkLevelCompletion(): void {
-    const allGoalsMet = this.goals.every(g => g.current >= g.target);
+    const allGoalsMet = this.goals.every((g) => g.current >= g.target);
 
     if (allGoalsMet || this.spinsRemaining <= 0) {
       const passed = allGoalsMet;
       const def = this.currentLevelDef!;
-      const stars = passed
-        ? def.starThresholds.filter(t => this.totalScore >= t).length
-        : 0;
+      const stars = passed ? def.starThresholds.filter((t) => this.totalScore >= t).length : 0;
       const coinsEarned = passed ? 100 + stars * 50 : 0;
 
       if (passed) {
         this.player.completeLevel(def.id, this.totalScore, stars);
         this.player.addCoins(coinsEarned);
+        this.sfx.play('levelComplete');
+        this.sfx.play('coinEarned');
+        // Stagger star sounds
+        for (let s = 0; s < stars; s++) {
+          setTimeout(() => this.sfx.play('starEarned', { starIndex: s }), 400 + s * 300);
+        }
+      } else {
+        this.sfx.play('levelFailed');
       }
 
       this.levelComplete.show({
@@ -563,6 +893,7 @@ export class Game {
       });
 
       this.levelComplete.onContinue = () => {
+        this.sfx.play('buttonPress');
         this.music.stop();
         if (passed) {
           this.fsm.transition('LEVEL_SELECT');
@@ -592,6 +923,7 @@ export class Game {
           goal.current = this.powerUpCount;
           break;
         case 'clear_blockers':
+          goal.current = this.blockersCleared;
           break;
       }
     }
@@ -610,11 +942,21 @@ export class Game {
     const goalTexts = this.goals.map((g, i) => {
       let text = '';
       switch (g.type) {
-        case 'score': text = `Score: ${g.current}/${g.target}`; break;
-        case 'collect': text = `${g.symbolId}: ${g.current}/${g.target}`; break;
-        case 'cascades': text = `Cascades: ${g.current}/${g.target}`; break;
-        case 'power_ups': text = `Power-ups: ${g.current}/${g.target}`; break;
-        case 'clear_blockers': text = `Blockers: ${g.current}/${g.target}`; break;
+        case 'score':
+          text = `Score: ${g.current}/${g.target}`;
+          break;
+        case 'collect':
+          text = `${g.symbolId}: ${g.current}/${g.target}`;
+          break;
+        case 'cascades':
+          text = `Cascades: ${g.current}/${g.target}`;
+          break;
+        case 'power_ups':
+          text = `Power-ups: ${g.current}/${g.target}`;
+          break;
+        case 'clear_blockers':
+          text = `Blockers: ${g.current}/${g.target}`;
+          break;
       }
       const done = g.current >= g.target;
       const t = new Text({
@@ -630,17 +972,23 @@ export class Game {
       return t;
     });
 
-    goalTexts.forEach(t => this.goalDisplay.addChild(t));
+    goalTexts.forEach((t) => this.goalDisplay.addChild(t));
   }
 
   private applyGravityToGrid(grid: (CellData | null)[][]): void {
     for (let c = 0; c < GameConfig.cols; c++) {
       let writeRow = GameConfig.rows - 1;
       for (let r = GameConfig.rows - 1; r >= 0; r--) {
-        if (grid[r][c]) {
+        const cell = grid[r][c];
+        if (cell?.isBlocker) {
+          // Blocker stays fixed — restart write pointer above it
+          writeRow = r - 1;
+          continue;
+        }
+        if (cell) {
           if (r !== writeRow) {
-            grid[writeRow][c] = grid[r][c];
-            grid[writeRow][c]!.row = writeRow;
+            grid[writeRow][c] = cell;
+            cell.row = writeRow;
             grid[r][c] = null;
           }
           writeRow--;

@@ -1,4 +1,4 @@
-import { Application } from 'pixi.js';
+import { Application, Rectangle } from 'pixi.js';
 import { Game } from '@/core/Game';
 import { GameConfig } from '@/config/GameConfig';
 import gsap from 'gsap';
@@ -20,7 +20,7 @@ async function boot() {
   }
 
   // Remove any leftover canvases
-  document.querySelectorAll('canvas').forEach(c => c.remove());
+  document.querySelectorAll('canvas').forEach((c) => c.remove());
 
   const app = new Application();
   window.__kefslot_app = app;
@@ -40,26 +40,62 @@ async function boot() {
   // Add canvas to DOM
   document.body.appendChild(app.canvas);
 
-  // Scale stage to fit window while maintaining aspect ratio
+  // Detect touch device once
+  GameConfig.isTouch = 'ontouchstart' in window;
+
+  let game: Game | null = null;
+
+  // Scale stage to fit window, with portrait/landscape detection
   const resize = () => {
     const windowW = window.innerWidth;
     const windowH = window.innerHeight;
-    const scale = Math.min(windowW / GameConfig.width, windowH / GameConfig.height);
+    const isPortrait = windowH > windowW * 1.2;
+
+    // Update active dimensions
+    GameConfig.isPortrait = isPortrait;
+    if (isPortrait) {
+      GameConfig.activeWidth = GameConfig.portraitWidth;
+      GameConfig.activeHeight = GameConfig.portraitHeight;
+      GameConfig.cellSize = GameConfig.cellSizePortrait;
+    } else {
+      GameConfig.activeWidth = GameConfig.width;
+      GameConfig.activeHeight = GameConfig.height;
+      GameConfig.cellSize = GameConfig.cellSizeLandscape;
+    }
+
+    const activeW = GameConfig.activeWidth;
+    const activeH = GameConfig.activeHeight;
+    const scale = Math.min(windowW / activeW, windowH / activeH);
+
     app.stage.scale.set(scale);
-    app.stage.x = (windowW - GameConfig.width * scale) / 2;
-    app.stage.y = (windowH - GameConfig.height * scale) / 2;
+    app.stage.x = (windowW - activeW * scale) / 2;
+    app.stage.y = (windowH - activeH * scale) / 2;
+
+    // Update stage hitArea in local (virtual canvas) coordinates so pointer
+    // events reach children across the full active canvas — app.screen is in
+    // screen pixels which are smaller than local coords when the stage is
+    // scaled down, causing hit-test failures on the edges.
+    app.stage.hitArea = new Rectangle(0, 0, activeW, activeH);
+
+    // Notify game of layout change
+    game?.relayout(isPortrait);
   };
 
   window.__kefslot_resize = resize;
   window.addEventListener('resize', resize);
-  resize();
 
-  // Ensure interactivity on stage
+  // Ensure interactivity on stage (hitArea is set in resize())
   app.stage.eventMode = 'static';
-  app.stage.hitArea = app.screen;
 
-  // Start game
-  new Game(app);
+  // Wait for custom fonts to load before rendering any text
+  await document.fonts.ready;
+
+  // Start game — await init so scenes are built before first resize
+  game = new Game(app);
+  await game.init();
+
+  // Initial resize after game scenes are ready
+  resize();
 }
 
 boot().catch(console.error);

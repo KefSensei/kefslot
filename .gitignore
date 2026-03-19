@@ -2,3 +2,16 @@ node_modules/
 dist/
 .DS_Store
 *.local
+
+# Raw unprocessed assets (drop here for processing, removed after)
+src/assets/raw/
+
+# Environment
+.env
+.env.*
+
+# MCP server deps
+tools/kie-mcp/node_modules/
+
+# MCP config (contains API keys)
+.mcp.json

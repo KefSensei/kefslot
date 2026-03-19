@@ -9,14 +9,14 @@ export type GameState =
   | 'LEVEL_CHECK';
 
 const validTransitions: Record<GameState, GameState[]> = {
-  MENU:            ['LEVEL_SELECT'],
-  LEVEL_SELECT:    ['IDLE', 'MENU'],
-  IDLE:            ['SPINNING', 'LEVEL_SELECT'],
-  SPINNING:        ['CASCADE_RESOLVE'],
+  MENU: ['LEVEL_SELECT'],
+  LEVEL_SELECT: ['IDLE', 'MENU', 'SPINNING'],
+  IDLE: ['SPINNING', 'LEVEL_SELECT'],
+  SPINNING: ['CASCADE_RESOLVE'],
   CASCADE_RESOLVE: ['MATCH3_PHASE'],
-  MATCH3_PHASE:    ['SCORING'],
-  SCORING:         ['LEVEL_CHECK'],
-  LEVEL_CHECK:     ['IDLE', 'LEVEL_SELECT'],
+  MATCH3_PHASE: ['SCORING', 'SPINNING'],
+  SCORING: ['LEVEL_CHECK'],
+  LEVEL_CHECK: ['IDLE', 'LEVEL_SELECT', 'SPINNING'],
 };
 
 type StateChangeCallback = (from: GameState, to: GameState) => void;
@@ -41,7 +41,7 @@ export class StateMachine {
     }
     const from = this._state;
     this._state = to;
-    this.callbacks.forEach(cb => cb(from, to));
+    this.callbacks.forEach((cb) => cb(from, to));
     return true;
   }
 }

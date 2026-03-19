@@ -1,4 +1,4 @@
-import { Container, Graphics, Text, TextStyle, FederatedPointerEvent, FillGradient } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, TextStyle, FederatedPointerEvent, FillGradient } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { CellData, PowerUpType } from '@/models/Symbol';
 import { SymbolDef, getSymbolsForLevel } from '@/config/SymbolConfig';
@@ -6,9 +6,11 @@ import { weightedRandom } from '@/utils/MathUtils';
 import { createCell } from '@/models/Symbol';
 import { MatchEffects } from '@/effects/MatchEffects';
 import { lightenColor, darkenColor, colorToHex } from '@/utils/ColorUtils';
+import { getSymbolTexture } from '@/config/SymbolTextures';
 import gsap from 'gsap';
 
-const CELL = GameConfig.cellSize;
+/** Cell size — read dynamically so it updates when orientation changes */
+const getCellSize = () => GameConfig.cellSize;
 const GAP = 4;
 
 // Cached gradients per symbol color
@@ -64,11 +66,18 @@ export class SlotGrid extends Container {
   private hintGraphics: Graphics[] = [];
   private hintTweens: gsap.core.Tween[] = [];
 
+  // Power-up glow
+  private powerUpGlowTweens: gsap.core.Tween[] = [];
+
+  // Spin clipping mask
+  private spinMask: Graphics | null = null;
+
   // Drag state
   private dragStart: { row: number; col: number; px: number; py: number } | null = null;
   private isDragging = false;
 
   onSwapAttempt: ((r1: number, c1: number, r2: number, c2: number) => void) | null = null;
+  onPowerUpTap: ((row: number, col: number) => void) | null = null;
 
   constructor() {
     super();
@@ -114,6 +123,7 @@ export class SlotGrid extends Container {
 
     const rows = GameConfig.rows;
     const cols = GameConfig.cols;
+    const CELL = getCellSize();
     const totalW = cols * (CELL + GAP) - GAP;
     const totalH = rows * (CELL + GAP) - GAP;
     const offsetX = -totalW / 2;
@@ -140,8 +150,8 @@ export class SlotGrid extends Container {
         const data = this.gridData[r]?.[c];
         if (data) {
           const sprite = new CellSprite(data);
-          sprite.x = offsetX + c * (CELL + GAP);
-          sprite.y = offsetY + r * (CELL + GAP);
+          sprite.x = offsetX + c * (getCellSize() + GAP);
+          sprite.y = offsetY + r * (getCellSize() + GAP);
           this.addChild(sprite);
           this.cells[r][c] = sprite;
 
@@ -150,7 +160,7 @@ export class SlotGrid extends Container {
           sprite.cursor = 'pointer';
           sprite.on('pointerdown', (e: FederatedPointerEvent) => this.onDragStart(r, c, e));
           sprite.on('pointermove', (e: FederatedPointerEvent) => this.onDragMove(r, c, e));
-          sprite.on('pointerup', () => this.onDragEnd());
+          sprite.on('pointerup', (e: FederatedPointerEvent) => this.onDragEnd(e));
           sprite.on('pointerupoutside', () => this.onDragEnd());
         } else {
           this.cells[r][c] = null;
@@ -182,13 +192,13 @@ export class SlotGrid extends Container {
     // Gold frame border
     const frame = new Graphics();
     frame.roundRect(fx, fy, fw, fh, 12);
-    frame.stroke({ color: 0xD4AF37, width: 4, alpha: 0.9 });
+    frame.stroke({ color: 0xd4af37, width: 4, alpha: 0.9 });
     this.frameContainer.addChild(frame);
 
     // Inner gold trim
     const innerFrame = new Graphics();
     innerFrame.roundRect(fx + 6, fy + 6, fw - 12, fh - 12, 8);
-    innerFrame.stroke({ color: 0xF5D060, width: 1.5, alpha: 0.4 });
+    innerFrame.stroke({ color: 0xf5d060, width: 1.5, alpha: 0.4 });
     this.frameContainer.addChild(innerFrame);
 
     // Corner diamonds
@@ -206,17 +216,17 @@ export class SlotGrid extends Container {
       d.lineTo(corner.x, corner.y + s);
       d.lineTo(corner.x - s, corner.y);
       d.closePath();
-      d.fill({ color: 0xF5D060 });
+      d.fill({ color: 0xf5d060 });
       this.frameContainer.addChild(d);
     }
 
     // Reel dividers (vertical lines between columns)
     const cols = GameConfig.cols;
     for (let c = 1; c < cols; c++) {
-      const lx = offsetX + c * (CELL + GAP) - GAP / 2;
+      const lx = offsetX + c * (getCellSize() + GAP) - GAP / 2;
       const divider = new Graphics();
       divider.moveTo(lx, offsetY - 4);
-      divider.lineTo(lx, offsetY + GameConfig.rows * (CELL + GAP) - GAP + 4);
+      divider.lineTo(lx, offsetY + GameConfig.rows * (getCellSize() + GAP) - GAP + 4);
       divider.stroke({ color: 0x2a1050, width: 1.5, alpha: 0.5 });
       this.frameContainer.addChild(divider);
     }
@@ -224,7 +234,7 @@ export class SlotGrid extends Container {
     // Light strip (pulses on wins)
     this.frameLightStrip = new Graphics();
     this.frameLightStrip.roundRect(fx + 3, fy + 3, fw - 6, fh - 6, 10);
-    this.frameLightStrip.stroke({ color: 0xF5D060, width: 2, alpha: 0 });
+    this.frameLightStrip.stroke({ color: 0xf5d060, width: 2, alpha: 0 });
     this.frameContainer.addChild(this.frameLightStrip);
   }
 
@@ -243,7 +253,8 @@ export class SlotGrid extends Container {
           const dur = 2.5 + Math.random() * 1.5;
           const del = Math.random() * 3;
           gsap.to(sprite.scale, {
-            x: 1.02, y: 1.02,
+            x: 1.02,
+            y: 1.02,
             duration: dur,
             delay: del,
             yoyo: true,
@@ -283,14 +294,51 @@ export class SlotGrid extends Container {
     this.addChild(mask);
     shimmer.mask = mask;
 
-    this.shimmerTween = gsap.fromTo(shimmer, { x: offsetX - 80 }, {
-      x: offsetX + totalW + 80,
-      duration: 3,
-      delay: 2,
-      repeat: -1,
-      repeatDelay: 5,
-      ease: 'none',
-    });
+    this.shimmerTween = gsap.fromTo(
+      shimmer,
+      { x: offsetX - 80 },
+      {
+        x: offsetX + totalW + 80,
+        duration: 3,
+        delay: 2,
+        repeat: -1,
+        repeatDelay: 5,
+        ease: 'none',
+      },
+    );
+  }
+
+  /** Pulse power-up cells to invite tapping */
+  startPowerUpGlow(): void {
+    this.stopPowerUpGlow();
+    for (let r = 0; r < this.cells.length; r++) {
+      for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
+        const sprite = this.cells[r]?.[c];
+        if (sprite?.data.powerUp) {
+          const tw = gsap.to(sprite, {
+            alpha: 0.6,
+            duration: 0.5,
+            yoyo: true,
+            repeat: -1,
+            ease: 'sine.inOut',
+          });
+          this.powerUpGlowTweens.push(tw);
+        }
+      }
+    }
+  }
+
+  /** Stop power-up pulsing */
+  stopPowerUpGlow(): void {
+    for (const tw of this.powerUpGlowTweens) tw.kill();
+    this.powerUpGlowTweens = [];
+    // Reset alpha
+    for (let r = 0; r < this.cells.length; r++) {
+      for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
+        const sprite = this.cells[r]?.[c];
+        if (sprite) sprite.alpha = 1;
+      }
+    }
   }
 
   setInteractive(enabled: boolean): void {
@@ -314,7 +362,7 @@ export class SlotGrid extends Container {
     for (const pos of positions) {
       const sprite = this.cells[pos.row]?.[pos.col];
       if (sprite) {
-        worldPositions.push({ x: sprite.x + CELL / 2, y: sprite.y + CELL / 2 });
+        worldPositions.push({ x: sprite.x + getCellSize() / 2, y: sprite.y + getCellSize() / 2 });
         color = sprite.data.symbol.color;
         tl.to(sprite.scale, { x: 0, y: 0, duration: 0.25, ease: 'back.in' }, 0);
         tl.to(sprite, { alpha: 0, duration: 0.25 }, 0);
@@ -339,15 +387,62 @@ export class SlotGrid extends Container {
     await tl.then();
   }
 
+  /** Apply a clipping mask to hide symbols outside the grid frame during spin */
+  private applySpinMask(): void {
+    this.removeSpinMask();
+    const rows = GameConfig.rows;
+    const cols = GameConfig.cols;
+    const totalW = cols * (getCellSize() + GAP) - GAP;
+    const totalH = rows * (getCellSize() + GAP) - GAP;
+    const offsetX = -totalW / 2;
+    const offsetY = -totalH / 2;
+    const pad = 8; // small padding so symbols aren't clipped at the frame edge
+
+    this.spinMask = new Graphics();
+    this.spinMask.roundRect(offsetX - pad, offsetY - pad, totalW + pad * 2, totalH + pad * 2, 10);
+    this.spinMask.fill({ color: 0xffffff });
+    this.addChild(this.spinMask);
+    this.mask = this.spinMask;
+  }
+
+  /** Remove the spin clipping mask */
+  private removeSpinMask(): void {
+    this.mask = null;
+    if (this.spinMask) {
+      this.spinMask.destroy();
+      this.spinMask = null;
+    }
+  }
+
   /**
    * Slot-style reel spin: current symbols scroll downward off-screen per column,
    * then new grid is rendered and new symbols scroll down from above with bounce.
    * Each column stops at a different time (left first, right last).
+   * A mask clips symbols to the grid frame so nothing leaks outside.
    */
   async animateReelSpin(generateNewGrid: () => void): Promise<void> {
     const rows = GameConfig.rows;
     const cols = GameConfig.cols;
-    const totalH = rows * (CELL + GAP) - GAP;
+
+    // Apply mask so symbols don't show outside the grid frame
+    this.applySpinMask();
+
+    // Generate per-column random speeds: left columns tend to be faster,
+    // right columns slower, with random variance — like a real slot machine.
+    const colSpeeds: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      // Base duration increases left-to-right: 0.25s to 0.45s
+      const base = 0.25 + (c / (cols - 1)) * 0.2;
+      // Random variance ±0.08s
+      const variance = (Math.random() - 0.5) * 0.16;
+      colSpeeds.push(Math.max(0.2, base + variance));
+    }
+
+    // Per-column stagger delay: each column starts slightly after the previous
+    const colDelays: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      colDelays.push(c * (0.08 + Math.random() * 0.06));
+    }
 
     // Phase 1: Scroll current symbols downward off-screen
     const scrollOut = gsap.timeline();
@@ -355,12 +450,16 @@ export class SlotGrid extends Container {
       for (let r = 0; r < rows; r++) {
         const sprite = this.cells[r]?.[c];
         if (sprite) {
-          scrollOut.to(sprite, {
-            y: sprite.y + 500 + r * 40,
-            alpha: 0,
-            duration: 0.35,
-            ease: 'power2.in',
-          }, c * 0.1 + r * 0.02);
+          scrollOut.to(
+            sprite,
+            {
+              y: sprite.y + 500 + r * 40,
+              alpha: 0,
+              duration: colSpeeds[c],
+              ease: 'power2.in',
+            },
+            colDelays[c] + r * 0.02,
+          );
         }
       }
     }
@@ -369,29 +468,44 @@ export class SlotGrid extends Container {
     // Phase 2: Generate new grid data and render
     generateNewGrid();
 
-    // Phase 3: New symbols enter from above and scroll into place
+    // Phase 3: New symbols enter from above and scroll into place.
+    // Per-column landing delay — left columns land first, right last, with variance.
+    const landDelays: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      const base = c * 0.18;
+      const variance = (Math.random() - 0.3) * 0.1;
+      landDelays.push(Math.max(0, base + variance));
+    }
+    const landDurations: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      landDurations.push(0.4 + Math.random() * 0.15);
+    }
+
     const scrollIn = gsap.timeline();
     for (let c = 0; c < cols; c++) {
       for (let r = 0; r < rows; r++) {
         const sprite = this.cells[r]?.[c];
         if (sprite) {
           const targetY = sprite.y;
-          // Start above the grid, staggered per column
           sprite.y = targetY - 600 - r * 50;
           sprite.alpha = 1;
 
-          const colDelay = c * 0.2;
-          const rowDelay = r * 0.04;
-
-          scrollIn.to(sprite, {
-            y: targetY,
-            duration: 0.5,
-            ease: 'bounce.out',
-          }, colDelay + rowDelay);
+          scrollIn.to(
+            sprite,
+            {
+              y: targetY,
+              duration: landDurations[c],
+              ease: 'bounce.out',
+            },
+            landDelays[c] + r * 0.04,
+          );
         }
       }
     }
     await scrollIn.then();
+
+    // Remove mask so effects/hints aren't clipped during gameplay
+    this.removeSpinMask();
   }
 
   // Animate gravity drop for cells that moved down
@@ -411,7 +525,7 @@ export class SlotGrid extends Container {
     this.renderGrid();
 
     const tl = gsap.timeline();
-    const totalH = GameConfig.rows * (CELL + GAP) - GAP;
+    const totalH = GameConfig.rows * (getCellSize() + GAP) - GAP;
     const offsetY = -totalH / 2;
 
     for (let c = 0; c < GameConfig.cols; c++) {
@@ -425,11 +539,15 @@ export class SlotGrid extends Container {
 
         if (data.row !== r || !oldPositions.has(`${data.symbol.id}_${data.row}_${data.col}`)) {
           sprite.y = offsetY - 100 - Math.random() * 100;
-          tl.to(sprite, {
-            y: targetY,
-            duration: 0.4,
-            ease: 'bounce.out',
-          }, c * 0.05 + r * 0.03);
+          tl.to(
+            sprite,
+            {
+              y: targetY,
+              duration: 0.4,
+              ease: 'bounce.out',
+            },
+            c * 0.05 + r * 0.03,
+          );
         }
       }
     }
@@ -457,8 +575,10 @@ export class SlotGrid extends Container {
     const s2 = this.cells[r2]?.[c2];
     if (!s1 || !s2) return;
 
-    const s1x = s1.x, s1y = s1.y;
-    const s2x = s2.x, s2y = s2.y;
+    const s1x = s1.x,
+      s1y = s1.y;
+    const s2x = s2.x,
+      s2y = s2.y;
 
     const tl = gsap.timeline();
     tl.to(s1, { x: s2x, y: s2y, duration: 0.15, ease: 'power2.inOut' }, 0);
@@ -471,7 +591,7 @@ export class SlotGrid extends Container {
   /** Get cell position in local coords */
   getCellPosition(row: number, col: number): { x: number; y: number } | null {
     const sprite = this.cells[row]?.[col];
-    if (sprite) return { x: sprite.x + CELL / 2, y: sprite.y + CELL / 2 };
+    if (sprite) return { x: sprite.x + getCellSize() / 2, y: sprite.y + getCellSize() / 2 };
     return null;
   }
 
@@ -480,13 +600,17 @@ export class SlotGrid extends Container {
   /** Show a subtle bounce on two cells to hint a valid swap */
   showHint(r1: number, c1: number, r2: number, c2: number): void {
     this.clearHint();
-    for (const [r, c] of [[r1, c1], [r2, c2]]) {
+    for (const [r, c] of [
+      [r1, c1],
+      [r2, c2],
+    ]) {
       const sprite = this.cells[r]?.[c];
       if (!sprite) continue;
 
       // Gentle repeating bounce on the actual cell sprite
       const tween = gsap.to(sprite.scale, {
-        x: 1.1, y: 1.1,
+        x: 1.1,
+        y: 1.1,
         duration: 0.5,
         yoyo: true,
         repeat: -1,
@@ -528,10 +652,12 @@ export class SlotGrid extends Container {
     const local = e.getLocalPosition(this);
     const dx = local.x - this.dragStart.px;
     const dy = local.y - this.dragStart.py;
-    const threshold = CELL * 0.4;
+    // Lower threshold on touch devices for easier finger swiping
+    const threshold = GameConfig.isTouch ? getCellSize() * 0.25 : getCellSize() * 0.4;
 
     if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
-      let dr = 0, dc = 0;
+      let dr = 0,
+        dc = 0;
       if (Math.abs(dx) > Math.abs(dy)) {
         dc = dx > 0 ? 1 : -1;
       } else {
@@ -552,24 +678,42 @@ export class SlotGrid extends Container {
     }
   }
 
-  private onDragEnd(): void {
+  private onDragEnd(e?: FederatedPointerEvent): void {
     if (this.dragStart) {
-      this.cells[this.dragStart.row]?.[this.dragStart.col]?.setSelected(false);
+      const { row, col } = this.dragStart;
+      this.cells[row]?.[col]?.setSelected(false);
+
+      // Detect tap (no significant movement): activate power-up if present
+      if (e && this._interactive) {
+        const local = e.getLocalPosition(this);
+        const dx = local.x - this.dragStart.px;
+        const dy = local.y - this.dragStart.py;
+        const tapRadius = GameConfig.isTouch ? 15 : 5;
+        if (Math.abs(dx) < tapRadius && Math.abs(dy) < tapRadius) {
+          const cellData = this.gridData[row]?.[col];
+          if (cellData?.powerUp) {
+            this.dragStart = null;
+            this.isDragging = false;
+            this.onPowerUpTap?.(row, col);
+            return;
+          }
+        }
+      }
     }
     this.dragStart = null;
     this.isDragging = false;
   }
 }
 
-// Gem-like cell visual with gradient, shadow, shine, bevel
+// Gem-like cell visual with AI-generated sprite or fallback gradient shape
 class CellSprite extends Container {
   private bg: Graphics;
-  private icon: Graphics;
+  private icon: Container;
   private selectHighlight: Graphics;
 
   constructor(public data: CellData) {
     super();
-    const size = CELL;
+    const size = getCellSize();
 
     // Background tile with subtle gradient center
     this.bg = new Graphics();
@@ -577,9 +721,20 @@ class CellSprite extends Container {
     this.bg.fill({ color: 0x1e0a3a, alpha: 0.8 });
     this.addChild(this.bg);
 
-    // Symbol shape with gem treatment
-    this.icon = new Graphics();
-    this.drawGemShape(this.icon, data.symbol.shape, data.symbol.color, size);
+    // Symbol: use AI sprite if available, fallback to geometric shape
+    const texture = getSymbolTexture(data.symbol.id);
+    if (texture) {
+      const sprite = new Sprite(texture);
+      sprite.width = size * 0.9;
+      sprite.height = size * 0.9;
+      sprite.x = size * 0.05;
+      sprite.y = size * 0.05;
+      this.icon = sprite;
+    } else {
+      const g = new Graphics();
+      this.drawGemShape(g, data.symbol.shape, data.symbol.color, size);
+      this.icon = g;
+    }
     this.addChild(this.icon);
 
     // Power-up indicator
@@ -588,10 +743,16 @@ class CellSprite extends Container {
       this.addChild(puIcon);
     }
 
+    // Blocker overlay
+    if (data.isBlocker) {
+      const blockerOverlay = this.createBlockerOverlay(data.blockerHealth, size);
+      this.addChild(blockerOverlay);
+    }
+
     // Selection highlight
     this.selectHighlight = new Graphics();
     this.selectHighlight.roundRect(-3, -3, size + 6, size + 6, 10);
-    this.selectHighlight.stroke({ color: 0xF5D060, width: 3, alpha: 0.9 });
+    this.selectHighlight.stroke({ color: 0xf5d060, width: 3, alpha: 0.9 });
     this.selectHighlight.visible = false;
     this.addChild(this.selectHighlight);
   }
@@ -700,16 +861,69 @@ class CellSprite extends Container {
     }
   }
 
-  private createPowerUpIndicator(type: PowerUpType): Graphics {
-    const g = new Graphics();
-    const size = CELL;
+  private createPowerUpIndicator(type: PowerUpType): Container {
+    const container = new Container();
+    const size = getCellSize();
     const color = type === 'blast' ? 0x00e5ff : type === 'bomb' ? 0xff5722 : 0xffd700;
-    // Glowing ring
-    g.circle(size - 12, 12, 10);
-    g.fill({ color, alpha: 0.3 });
-    g.circle(size - 12, 12, 7);
-    g.fill({ color });
-    g.stroke({ color: 0xffffff, width: 1.5 });
+    const label = type === 'blast' ? 'BLAST' : type === 'bomb' ? 'BOMB' : 'RAINBOW';
+
+    // Full-width banner at bottom of cell
+    const bg = new Graphics();
+    bg.roundRect(2, size - 22, size - 4, 20, 4);
+    bg.fill({ color: 0x000000, alpha: 0.7 });
+    bg.stroke({ color, width: 1.5, alpha: 0.9 });
+    container.addChild(bg);
+
+    const text = new Text({
+      text: label,
+      style: new TextStyle({
+        fontSize: 11,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        fill: color,
+        letterSpacing: 1,
+      }),
+    });
+    text.anchor.set(0.5);
+    text.x = size / 2;
+    text.y = size - 12;
+    container.addChild(text);
+
+    return container;
+  }
+
+  private createBlockerOverlay(health: number, size: number): Graphics {
+    const g = new Graphics();
+    if (health >= 2) {
+      // Stone: gray overlay with cross-hatch
+      g.roundRect(2, 2, size - 4, size - 4, 6);
+      g.fill({ color: 0x888888, alpha: 0.55 });
+      g.stroke({ color: 0x666666, width: 2 });
+      // Cross-hatch pattern
+      g.moveTo(size * 0.2, size * 0.2);
+      g.lineTo(size * 0.8, size * 0.8);
+      g.stroke({ color: 0x555555, width: 1.5, alpha: 0.5 });
+      g.moveTo(size * 0.8, size * 0.2);
+      g.lineTo(size * 0.2, size * 0.8);
+      g.stroke({ color: 0x555555, width: 1.5, alpha: 0.5 });
+      // "2" indicator
+      g.circle(size / 2, size / 2, 12);
+      g.fill({ color: 0x444444, alpha: 0.7 });
+      g.stroke({ color: 0xaaaaaa, width: 1 });
+    } else {
+      // Ice: blue-white translucent overlay with diagonal cracks
+      g.roundRect(2, 2, size - 4, size - 4, 6);
+      g.fill({ color: 0xaaddff, alpha: 0.45 });
+      g.stroke({ color: 0x88ccff, width: 2, alpha: 0.7 });
+      // Diagonal crack lines
+      g.moveTo(size * 0.15, size * 0.3);
+      g.lineTo(size * 0.45, size * 0.55);
+      g.lineTo(size * 0.35, size * 0.75);
+      g.stroke({ color: 0xffffff, width: 1.5, alpha: 0.6 });
+      g.moveTo(size * 0.6, size * 0.15);
+      g.lineTo(size * 0.7, size * 0.45);
+      g.stroke({ color: 0xffffff, width: 1, alpha: 0.4 });
+    }
     return g;
   }
 }
