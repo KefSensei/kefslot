@@ -52,7 +52,6 @@ export class Game {
   private spinButton!: SpinButton;
   private levelComplete!: LevelComplete;
   private levelIntro!: LevelIntro;
-  private goalDisplay!: Container;
 
   // Layout references for relayout
   private gameBg!: Sprite;
@@ -192,6 +191,12 @@ export class Game {
     this.hud.onSfxToggle = (muted) => {
       this.sfx.setMuted(muted);
     };
+    this.hud.onExitLevel = () => {
+      this.music.stop?.();
+      this.clearHintTimer();
+      this.fsm.transition('LEVEL_SELECT');
+      this.showScene('levelSelect');
+    };
     this.gameScene.addChild(this.hud);
 
     // Slot Grid — position to match cabinet screen area
@@ -210,12 +215,6 @@ export class Game {
     if (isPortrait) this.spinButton.setPortrait(true);
     this.spinButton.onSpin = () => this.handleSpin();
     this.gameScene.addChild(this.spinButton);
-
-    // Goal display — just above spin button
-    this.goalDisplay = new Container();
-    this.goalDisplay.x = w / 2;
-    this.goalDisplay.y = isPortrait ? h * 0.76 : h * 0.72;
-    this.gameScene.addChild(this.goalDisplay);
 
     // Level Intro overlay
     this.levelIntro = new LevelIntro();
@@ -262,10 +261,6 @@ export class Game {
     this.spinButton.x = w / 2;
     this.spinButton.y = isPortrait ? h * 0.82 : h * 0.78;
     this.spinButton.setPortrait(isPortrait);
-
-    // Goal display — just above spin button
-    this.goalDisplay.x = w / 2;
-    this.goalDisplay.y = isPortrait ? h * 0.76 : h * 0.72;
 
     // HUD
     this.hud.setPortrait(isPortrait);
@@ -316,8 +311,11 @@ export class Game {
       case 'MATCH3_PHASE':
         this.slotGrid.setInteractive(true);
         this.spinButton.setEnabled(this.spinsRemaining > 0);
-        this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
-        this.hud.showMessage('Drag to swap symbols!', 2000);
+        if (this.spinsRemaining === 0) {
+          this.hud.showMessage('Last moves — drag to swap!', 2500);
+        } else {
+          this.hud.showMessage('Drag to swap symbols!', 2000);
+        }
         this.startHintTimer();
         this.slotGrid.startPowerUpGlow();
         // Check for dead board (no valid swaps)
@@ -347,13 +345,14 @@ export class Game {
     this.hud.setMoves(def.movesPerSpin);
     this.hud.setCoins(this.player.coins);
     this.hud.setMultiplier(1);
+    this.hud.setScoreGoal(def.starThresholds[0]);
+    this.hud.setPowerUpCount(0);
     // Show scatter counter if this level has scatter threshold, otherwise hide
     if (def.scatterThreshold) {
       this.hud.setScatterProgress(0, def.scatterThreshold);
     } else {
       this.hud.hideScatterProgress();
     }
-    this.updateGoalDisplay();
 
     // Start music (lead vocals only, stems layer in as score grows)
     this.music.start();
@@ -535,6 +534,7 @@ export class Game {
 
       // Animate clearing with confetti and floating score
       const allCells = matches.flatMap((m) => m.cells);
+      const cascadeClearedKeys = new Set(allCells.map((p) => `${p.row},${p.col}`));
       await this.slotGrid.animateClear(allCells, roundScore);
 
       // Remove from data
@@ -554,6 +554,7 @@ export class Game {
       // Remove destroyed blockers from grid
       for (const pos of blockerResult.destroyed) {
         grid[pos.row][pos.col] = null;
+        cascadeClearedKeys.add(`${pos.row},${pos.col}`);
       }
       this.updateGoalProgress();
 
@@ -565,8 +566,9 @@ export class Game {
 
       this.match3.setGrid(grid);
 
-      // Animate the gravity drop (new cells fall in)
-      await this.slotGrid.animateGravityDrop(grid);
+      // Animate the gravity drop — surviving cells fall from their old positions,
+      // new fill cells bounce in from above
+      await this.slotGrid.animateGravityDrop(grid, cascadeClearedKeys);
 
       cascadeLevel++;
       matches = this.cascade.findMatches(grid);
@@ -576,7 +578,7 @@ export class Game {
         effects.showCascadeBurst(0, 0, this.cascade.getMultiplier(cascadeLevel));
         this.sfx.play('cascade', { cascadeLevel });
         this.hud.showMessage(`Cascade x${cascadeLevel + 1}!`, 1000);
-        await delay(300);
+        await delay(100);
       }
     }
 
@@ -613,7 +615,6 @@ export class Game {
 
     this.movesRemaining--;
     this.hud.setMoves(this.movesRemaining);
-    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
 
     // Add score
     this.totalScore += result.score;
@@ -621,6 +622,7 @@ export class Game {
     this.cascadeCount += result.cascades;
     this.powerUpCount += result.powerUpsCreated.length;
     this.blockersCleared += result.blockersDestroyed;
+    this.hud.setPowerUpCount(this.countPowerUpsOnBoard());
 
     // Track collections from match-3 phase
     for (const match of result.matches) {
@@ -678,27 +680,49 @@ export class Game {
       this.sfx.play('powerUpCreate');
     }
 
-    // Show confetti and score for match-3 swap results
-    const grid = this.match3.getGrid();
-    if (result.score > 0) {
+    // Collect all cleared cell positions across all cascades
+    const allMatchedCells = result.matches.flatMap((m) => m.cells);
+    const clearedKeys = new Set(allMatchedCells.map((p) => `${p.row},${p.col}`));
+
+    // Show confetti, ONE floating score at centroid, and ONE match-word for biggest match
+    if (result.score > 0 && allMatchedCells.length > 0) {
       this.sfx.play('scorePop');
       this.sfx.play('confetti');
       const effects = this.slotGrid.getEffects();
-      const pos = this.slotGrid.getCellPosition(r1, c1);
-      if (pos) {
-        effects.showFloatingScore(pos.x, pos.y, result.score);
-        effects.spawnConfetti([pos], 0xf1c40f);
+
+      // Floating score at the centroid of all matched cells
+      const positions = allMatchedCells
+        .map((p) => this.slotGrid.getCellPosition(p.row, p.col))
+        .filter(Boolean) as { x: number; y: number }[];
+      if (positions.length > 0) {
+        const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+        const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+        effects.showFloatingScore(cx, cy, result.score);
+        effects.spawnConfetti(positions.slice(0, 3), 0xf1c40f);
       }
-      // Show match word label for each matched group
-      for (const match of result.matches) {
-        const midCell = match.cells[Math.floor(match.cells.length / 2)];
+
+      // Single match-word for the biggest match (skip TRIPLE for cascades to reduce noise)
+      const biggestMatch = result.matches.reduce(
+        (best, m) => (m.cells.length > best.cells.length ? m : best),
+        result.matches[0],
+      );
+      // Show QUAD+ always; show TRIPLE only on the first cascade (no prior cascades)
+      if (biggestMatch.cells.length >= 4 || result.cascades === 0) {
+        const midCell = biggestMatch.cells[Math.floor(biggestMatch.cells.length / 2)];
         const midPos = this.slotGrid.getCellPosition(midCell.row, midCell.col);
-        if (midPos) effects.showMatchWord(midPos.x, midPos.y, match.cells.length);
+        if (midPos) effects.showMatchWord(midPos.x, midPos.y, biggestMatch.cells.length);
       }
     }
 
-    // Update grid visual with gravity animation
-    await this.slotGrid.animateGravityDrop(this.match3.getGrid());
+    // Animate matched cells shrinking away BEFORE gravity fills the gaps.
+    // Only matched cells scale to 0 — unmatched cells stay visible throughout.
+    if (allMatchedCells.length > 0) {
+      await this.slotGrid.animateClear(allMatchedCells); // no score arg — already shown above
+    }
+
+    // Update grid visual: surviving cells drop from their old positions, new fills bounce in
+    await this.slotGrid.animateGravityDrop(this.match3.getGrid(), clearedKeys);
+    this.hud.setPowerUpCount(this.countPowerUpsOnBoard());
 
     if (result.cascades > 1) {
       this.hud.showMessage(`${result.cascades}x Cascade! +${result.score}`, 1500);
@@ -707,9 +731,6 @@ export class Game {
     // Re-enable interaction
     this.slotGrid.setInteractive(true);
     this.startHintTimer();
-
-    // Update spin button to reflect remaining moves
-    this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
 
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
@@ -748,10 +769,10 @@ export class Game {
       this.spinButton.setRespinStyle(true);
       this.spinButton.playAttention();
     } else {
-      // No spins and no moves — end the match phase
-      this.hud.showMessage('No moves left!', 1500);
+      // No spins and no moves — end the match phase quickly
+      this.hud.showMessage('No valid swaps!', 800);
       this.sfx.play('invalidSwap');
-      setTimeout(() => this.endMatchPhase(), 1500);
+      setTimeout(() => this.endMatchPhase(), 600);
     }
   }
 
@@ -812,7 +833,6 @@ export class Game {
     if (this.movesRemaining > 0) {
       this.movesRemaining--;
       this.hud.setMoves(this.movesRemaining);
-      this.spinButton.setText(`MOVES: ${this.movesRemaining}`);
     }
 
     // Track collections from cleared cells
@@ -855,7 +875,7 @@ export class Game {
     this.slotGrid.setInteractive(true);
     this.startHintTimer();
 
-    this.spinButton.setText(this.movesRemaining > 0 ? `MOVES: ${this.movesRemaining}` : 'TAP POWER-UPS!');
+    if (this.movesRemaining <= 0) this.spinButton.setText('TAP POWER-UPS!');
 
     // Check if moves depleted
     if (this.movesRemaining <= 0) {
@@ -968,12 +988,12 @@ export class Game {
     this.slotGrid.setInteractive(false);
     this.fsm.transition('SCORING');
 
-    this.hud.showMessage(`Spin complete! Score: ${this.totalScore}`, 1500);
+    this.hud.showMessage(`Spin complete! Score: ${this.totalScore}`, 800);
 
     setTimeout(() => {
       this.fsm.transition('LEVEL_CHECK');
       this.checkLevelCompletion();
-    }, 1500);
+    }, 800);
   }
 
   private checkLevelCompletion(): void {
@@ -1041,8 +1061,6 @@ export class Game {
           break;
       }
     }
-    this.updateGoalDisplay();
-
     // Update music stems based on score progress toward 3-star threshold
     if (this.currentLevelDef) {
       const maxScore = this.currentLevelDef.starThresholds[2];
@@ -1050,43 +1068,13 @@ export class Game {
     }
   }
 
-  private updateGoalDisplay(): void {
-    this.goalDisplay.removeChildren();
-
-    const goalTexts = this.goals.map((g, i) => {
-      let text = '';
-      switch (g.type) {
-        case 'score':
-          text = `Score: ${g.current}/${g.target}`;
-          break;
-        case 'collect':
-          text = `${g.symbolId}: ${g.current}/${g.target}`;
-          break;
-        case 'cascades':
-          text = `Cascades: ${g.current}/${g.target}`;
-          break;
-        case 'power_ups':
-          text = `Power-ups: ${g.current}/${g.target}`;
-          break;
-        case 'clear_blockers':
-          text = `Blockers: ${g.current}/${g.target}`;
-          break;
-      }
-      const done = g.current >= g.target;
-      const t = new Text({
-        text,
-        style: new TextStyle({
-          fontSize: 13,
-          fill: done ? 0x2ecc71 : 0xb0a0c0,
-          fontFamily: 'Segoe UI, sans-serif',
-        }),
-      });
-      t.anchor.set(0.5);
-      t.y = i * 18;
-      return t;
-    });
-
-    goalTexts.forEach((t) => this.goalDisplay.addChild(t));
+  private countPowerUpsOnBoard(): number {
+    const grid = this.match3.getGrid();
+    let count = 0;
+    for (let r = 0; r < GameConfig.rows; r++)
+      for (let c = 0; c < GameConfig.cols; c++)
+        if (grid[r]?.[c]?.powerUp) count++;
+    return count;
   }
 
   private applyGravityToGrid(grid: (CellData | null)[][]): void {

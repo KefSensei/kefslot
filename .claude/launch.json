@@ -13,5 +13,11 @@
       "runtimeArgs": ["-c", "cd /Users/db/repos/KefSensei/kefsensei-studio && /opt/homebrew/bin/node node_modules/.bin/astro dev --port 4321"],
       "port": 4321
     }
+  ,{
+      "name": "dbridge-site",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": ["-c", "/opt/homebrew/bin/npx serve /tmp/dBridge-site-setup --listen 3006 --no-clipboard"],
+      "port": 3006
+    }
   ]
 }

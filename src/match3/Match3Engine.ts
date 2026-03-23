@@ -343,19 +343,28 @@ export class Match3Engine {
   }
 
   private determinePowerUp(match: MatchGroup): { row: number; col: number; type: PowerUpType } | null {
-    if (match.cells.length >= 5) {
-      const mid = match.cells[Math.floor(match.cells.length / 2)];
+    if (this.currentLevel < 3) return null; // no power-ups before level 3
+
+    const mid = match.cells[Math.floor(match.cells.length / 2)];
+
+    if (match.cells.length >= 5 && this.currentLevel >= 6) {
+      // Rainbow only from level 6+
       return { row: mid.row, col: mid.col, type: 'rainbow' };
     }
     if (match.cells.length === 4) {
-      // Check if it's a line or L-shape
+      // Check if it's a straight line (blast) or L-shape (bomb)
       const isHorizontal = match.cells.every((c) => c.row === match.cells[0].row);
       const isVertical = match.cells.every((c) => c.col === match.cells[0].col);
-      const mid = match.cells[Math.floor(match.cells.length / 2)];
       if (isHorizontal || isVertical) {
+        // Blast (row/col clear) — available from level 3
         return { row: mid.row, col: mid.col, type: 'blast' };
       }
-      return { row: mid.row, col: mid.col, type: 'bomb' };
+      // Bomb (3×3 clear) — available from level 4
+      if (this.currentLevel >= 4) {
+        return { row: mid.row, col: mid.col, type: 'bomb' };
+      }
+      // L-shape at level 3 falls back to blast
+      return { row: mid.row, col: mid.col, type: 'blast' };
     }
     return null;
   }
