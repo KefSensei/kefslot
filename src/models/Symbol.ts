@@ -9,6 +9,8 @@ export interface CellData {
   powerUp: PowerUpType;
   isBlocker: boolean;
   blockerHealth: number; // hits needed to clear
+  chainId: number | null; // chain blocker group id — blockers with the same id are linked
+  tileMultiplier: number; // 0 = none, 2 = ×2, 3 = ×3 score zone
 }
 
 export function createCell(symbol: SymbolDef, row: number, col: number): CellData {
@@ -19,5 +21,7 @@ export function createCell(symbol: SymbolDef, row: number, col: number): CellDat
     powerUp: null,
     isBlocker: false,
     blockerHealth: 0,
+    chainId: null,
+    tileMultiplier: 0,
   };
 }

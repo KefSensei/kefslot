@@ -512,45 +512,82 @@ export class SlotGrid extends Container {
     this.removeSpinMask();
   }
 
-  // Animate gravity drop for cells that moved down
-  async animateGravityDrop(newData: (CellData | null)[][]): Promise<void> {
-    const oldPositions = new Map<string, { x: number; y: number }>();
+  /**
+   * Animate gravity drop for cells that moved down after matches were cleared.
+   *
+   * @param newData   The post-gravity/fill grid data.
+   * @param clearedKeys  Optional Set of "row,col" strings for cells that were
+   *                     just cleared by animateClear (their sprites are still in
+   *                     this.cells but scaled to 0).  When supplied, dropped cells
+   *                     start from their old sprite Y position rather than the top
+   *                     of the screen, giving a natural "fall-from-where-they-were"
+   *                     effect instead of appearing to rain in from off-screen.
+   */
+  async animateGravityDrop(newData: (CellData | null)[][], clearedKeys?: Set<string>): Promise<void> {
+    const rows = GameConfig.rows;
+    const cols = GameConfig.cols;
+    const CH = getCellH();
+    const totalH = rows * (CH + GAP) - GAP;
+    const aboveOffset = -totalH / 2 - 180; // starting Y for brand-new fill cells
 
-    for (let r = 0; r < this.cells.length; r++) {
-      for (let c = 0; c < (this.cells[r]?.length || 0); c++) {
+    // --- Snapshot old sprite Y positions before renderGrid destroys them ---
+    // For each column, build ordered lists (bottom→top) of:
+    //   survivors  — cells whose sprites still exist and were NOT cleared
+    //   (cleared cells are skipped; they were already animated to scale=0)
+    const survivorsByCol: { y: number }[][] = Array.from({ length: cols }, () => []);
+
+    for (let c = 0; c < cols; c++) {
+      for (let r = rows - 1; r >= 0; r--) {
+        const key = `${r},${c}`;
         const sprite = this.cells[r]?.[c];
-        if (sprite) {
-          oldPositions.set(`${sprite.data.symbol.id}_${r}_${c}`, { x: sprite.x, y: sprite.y });
+        if (sprite && (!clearedKeys || !clearedKeys.has(key))) {
+          survivorsByCol[c].push({ y: sprite.y });
         }
       }
+      // survivorsByCol[c] is ordered bottom-to-top
     }
 
     this.gridData = newData;
     this.renderGrid();
 
     const tl = gsap.timeline();
-    const totalH = GameConfig.rows * (getCellH() + GAP) - GAP;
-    const offsetY = -totalH / 2;
 
-    for (let c = 0; c < GameConfig.cols; c++) {
-      for (let r = 0; r < GameConfig.rows; r++) {
-        const sprite = this.cells[r]?.[c];
+    for (let c = 0; c < cols; c++) {
+      const survivors = survivorsByCol[c]; // bottom-to-top
+
+      // Collect new non-null rows in this column, bottom to top
+      const newRows: number[] = [];
+      for (let r = rows - 1; r >= 0; r--) {
+        if (newData[r]?.[c]) newRows.push(r);
+      }
+
+      const survivorCount = survivors.length;
+
+      for (let i = 0; i < newRows.length; i++) {
+        const newRow = newRows[i];
+        const sprite = this.cells[newRow]?.[c];
         if (!sprite) continue;
-        const data = newData[r]?.[c];
-        if (!data) continue;
 
         const targetY = sprite.y;
 
-        if (data.row !== r || !oldPositions.has(`${data.symbol.id}_${data.row}_${data.col}`)) {
-          sprite.y = offsetY - 100 - Math.random() * 100;
+        if (i < survivorCount) {
+          // This slot corresponds to a surviving (not-cleared) cell.
+          const oldY = survivors[i].y;
+          if (Math.abs(oldY - targetY) < 2) {
+            // Cell didn't move — leave it exactly where it is (no animation).
+            continue;
+          }
+          // Cell dropped from oldY down to targetY.
+          sprite.y = oldY;
+          tl.to(sprite, { y: targetY, duration: 0.35, ease: 'power2.in' }, c * 0.05);
+        } else {
+          // Truly new fill cell — drop in from above the grid with a bounce.
+          const fillIndex = i - survivorCount;
+          sprite.y = aboveOffset - fillIndex * (CH + GAP);
           tl.to(
             sprite,
-            {
-              y: targetY,
-              duration: 0.4,
-              ease: 'bounce.out',
-            },
-            c * 0.05 + r * 0.03,
+            { y: targetY, duration: 0.4, ease: 'bounce.out' },
+            c * 0.05 + fillIndex * 0.04,
           );
         }
       }
@@ -571,6 +608,10 @@ export class SlotGrid extends Container {
     tl.to(s1, { x: s2.x, y: s2.y, duration: 0.2, ease: 'power2.inOut' }, 0);
     tl.to(s2, { x: s1.x, y: s1.y, duration: 0.2, ease: 'power2.inOut' }, 0);
     await tl.then();
+
+    // Keep cells[] in sync with the new visual positions so post-swap
+    // lookups (animateClear, getCellPosition) resolve to the correct sprites.
+    [this.cells[r1][c1], this.cells[r2][c2]] = [this.cells[r2][c2], this.cells[r1][c1]];
   }
 
   // Animate invalid swap (bounce back)
@@ -754,10 +795,21 @@ class CellSprite extends Container {
       this.addChild(puIcon);
     }
 
+    // Tile multiplier badge (×2 / ×3 zone) — drawn under the symbol
+    if (data.tileMultiplier > 1) {
+      const badge = this.createMultiplierBadge(data.tileMultiplier, cellW, cellH);
+      this.addChildAt(badge, 1); // just above background
+    }
+
     // Blocker overlay
     if (data.isBlocker) {
       const blockerOverlay = this.createBlockerOverlay(data.blockerHealth, cellW, cellH);
       this.addChild(blockerOverlay);
+      // Chain blocker: add chain link icon if part of a chain
+      if (data.chainId !== null) {
+        const chainIcon = this.createChainIcon(cellW, cellH);
+        this.addChild(chainIcon);
+      }
     }
 
     // Selection highlight
@@ -900,6 +952,43 @@ class CellSprite extends Container {
     container.addChild(text);
 
     return container;
+  }
+
+  private createMultiplierBadge(mult: number, cellW: number, cellH: number): Container {
+    const c = new Container();
+    // Glowing rounded rect badge in bottom-right corner
+    const bw = 26,
+      bh = 16;
+    const bx = cellW - bw - 2,
+      by = cellH - bh - 2;
+    const bg = new Graphics();
+    bg.roundRect(bx, by, bw, bh, 5);
+    bg.fill({ color: mult === 3 ? 0xff6b35 : 0x9b59b6, alpha: 0.85 });
+    bg.stroke({ color: mult === 3 ? 0xffcc44 : 0xd4a0ff, width: 1.5 });
+    c.addChild(bg);
+    const label = new Text({
+      text: `×${mult}`,
+      style: new TextStyle({ fontSize: 11, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'monospace' }),
+    });
+    label.anchor.set(0.5);
+    label.x = bx + bw / 2;
+    label.y = by + bh / 2;
+    c.addChild(label);
+    // Gentle pulse
+    gsap.to(bg, { pixi: { alpha: 0.6 }, duration: 0.9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+    return c;
+  }
+
+  private createChainIcon(cellW: number, cellH: number): Graphics {
+    const g = new Graphics();
+    // Two interlocked circles in top-left corner — chain link symbol
+    const cx = 10,
+      cy = 10;
+    g.circle(cx - 3, cy, 5);
+    g.stroke({ color: 0xc0c0c0, width: 2, alpha: 0.9 });
+    g.circle(cx + 3, cy, 5);
+    g.stroke({ color: 0xc0c0c0, width: 2, alpha: 0.9 });
+    return g;
   }
 
   private createBlockerOverlay(health: number, cellW: number, cellH: number): Graphics {

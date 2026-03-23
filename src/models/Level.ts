@@ -25,6 +25,12 @@ export interface LevelDef {
   blockerCount?: number;
   blockerTypeSecondary?: 'ice' | 'stone';
   blockerCountSecondary?: number;
+  // World 2 mechanics
+  multiplierTileCount?: number; // how many ×2/×3 tiles to seed on the grid
+  hasChainBlockers?: boolean; // blockers linked in chains (destroying one weakens next)
+  chainBlockerCount?: number; // number of chained blockers to place
+  hasTimedMoves?: boolean; // countdown ring per move; faster = score bonus
+  scatterThreshold?: number; // scatters needed for a bonus spin (default 3)
   starThresholds: [number, number, number]; // score thresholds for 1/2/3 stars
   intro?: LevelIntroDef;
 }

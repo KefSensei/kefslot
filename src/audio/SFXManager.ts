@@ -23,7 +23,14 @@ export type SFXName =
   | 'levelIntro'
   | 'powerUpActivate'
   | 'blockerCrack'
-  | 'blockerBreak';
+  | 'blockerBreak'
+  // World 2 mechanics
+  | 'wildMatch'
+  | 'scatterCollect'
+  | 'bonusSpin'
+  | 'multiplierHit'
+  | 'chainBreak'
+  | 'timerTick';
 
 export interface SFXOptions {
   pitch?: number; // semitone offset
@@ -118,6 +125,24 @@ export class SFXManager {
         break;
       case 'blockerBreak':
         this.playBlockerBreak(t, vol);
+        break;
+      case 'wildMatch':
+        this.playWildMatch(t, vol);
+        break;
+      case 'scatterCollect':
+        this.playScatterCollect(t, vol);
+        break;
+      case 'bonusSpin':
+        this.playBonusSpin(t, vol);
+        break;
+      case 'multiplierHit':
+        this.playMultiplierHit(t, vol);
+        break;
+      case 'chainBreak':
+        this.playChainBreak(t, vol);
+        break;
+      case 'timerTick':
+        this.playTimerTick(t, vol);
         break;
     }
   }
@@ -456,5 +481,58 @@ export class SFXManager {
     this.tone(1800, t + 0.08, 0.06, vol * 0.1, 'sine', 0.002, 0.04);
     // Low thud
     this.tone(100, t + 0.02, 0.12, vol * 0.25, 'sine', 0.005, 0.1);
+  }
+
+  private playWildMatch(t: number, vol: number): void {
+    // Magical shimmer + ascending sparkle — Roxy substituting
+    this.sweep(600, 1800, t, 0.15, vol * 0.4, 'sine');
+    this.tone(1318, t + 0.08, 0.2, vol * 0.35, 'sine', 0.005, 0.15); // E6
+    this.tone(1760, t + 0.12, 0.15, vol * 0.25, 'sine', 0.005, 0.12); // A6
+    this.tone(2637, t + 0.16, 0.1, vol * 0.15, 'sine', 0.003, 0.08); // E7 sparkle
+    this.noise(t, 0.1, vol * 0.1, 6000, 'highpass');
+  }
+
+  private playScatterCollect(t: number, vol: number): void {
+    // Teal swirling chime — scroll collected
+    this.sweep(400, 1200, t, 0.12, vol * 0.35, 'sine');
+    this.tone(988, t + 0.06, 0.18, vol * 0.3, 'sine', 0.004, 0.14); // B5
+    this.tone(1318, t + 0.1, 0.12, vol * 0.2, 'sine', 0.003, 0.1);
+    this.noise(t + 0.05, 0.08, vol * 0.08, 4000, 'highpass');
+  }
+
+  private playBonusSpin(t: number, vol: number): void {
+    // Fanfare arpeggio — bonus spin awarded
+    const notes = [523, 784, 1047, 1568];
+    for (let i = 0; i < notes.length; i++) {
+      this.tone(notes[i], t + i * 0.08, 0.3, vol * 0.45, 'sine', 0.005, 0.25);
+    }
+    this.tone(2093, t + 0.35, 0.4, vol * 0.3, 'sine', 0.01, 0.35);
+    this.noise(t + 0.2, 0.4, vol * 0.1, 5000, 'highpass');
+  }
+
+  private playMultiplierHit(t: number, vol: number): void {
+    // Bright resonant ping — scoring through a multiplier tile
+    this.tone(1046, t, 0.25, vol * 0.5, 'sine', 0.003, 0.22); // C6
+    this.tone(1318, t + 0.02, 0.2, vol * 0.35, 'sine', 0.003, 0.18); // E6
+    this.tone(1568, t + 0.04, 0.15, vol * 0.25, 'sine', 0.002, 0.13); // G6
+    this.noise(t, 0.06, vol * 0.12, 7000, 'highpass');
+  }
+
+  private playChainBreak(t: number, vol: number): void {
+    // Metallic snap + spark cascade — chain link snapping
+    this.noise(t, 0.05, vol * 0.5, 3000, 'bandpass');
+    this.tone(400, t, 0.08, vol * 0.4, 'square', 0.002, 0.06);
+    this.tone(250, t + 0.03, 0.07, vol * 0.3, 'square', 0.002, 0.05);
+    // Spark sparkle
+    for (let i = 0; i < 3; i++) {
+      const f = 3000 + Math.random() * 2000;
+      this.tone(f, t + 0.04 + i * 0.03, 0.04, vol * 0.1, 'sine', 0.001, 0.03);
+    }
+  }
+
+  private playTimerTick(t: number, vol: number): void {
+    // Soft metronome click — per-second ring pulse
+    this.tone(1800, t, 0.025, vol * 0.2, 'sine', 0.001, 0.02);
+    this.noise(t, 0.02, vol * 0.06, 5000, 'highpass');
   }
 }

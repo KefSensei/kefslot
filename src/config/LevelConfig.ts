@@ -221,6 +221,9 @@ export const LevelConfigs: LevelDef[] = [
   },
 
   // World 2: Crystal Caverns
+  // Feature ramp: wilds (11-12) → scatter bonus spins (13-14) → multiplier tiles (15-16) → chain blockers (17-18) → timed moves (19) → boss (20)
+
+  // Level 11: INTRODUCES wild symbol (Roxy matches any gem) + new World 2 symbols
   {
     id: 11,
     world: 2,
@@ -231,7 +234,14 @@ export const LevelConfigs: LevelDef[] = [
     availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy'],
     hasBlockers: false,
     starThresholds: [3000, 6000, 12000],
+    intro: {
+      title: "Roxy's Wild!",
+      description:
+        'Welcome to the Crystal Caverns! Roxy is a Wild — she matches with any gem colour. Look for her golden star to complete tricky matches!',
+    },
   },
+
+  // Level 12: Wild persists — collection goal to learn the new gem pool
   {
     id: 12,
     world: 2,
@@ -239,10 +249,12 @@ export const LevelConfigs: LevelDef[] = [
     spins: 6,
     movesPerSpin: 6,
     goals: [{ type: 'collect', target: 20, symbolId: 'crystal' }],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'multiplier'],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy'],
     hasBlockers: false,
     starThresholds: [4000, 8000, 15000],
   },
+
+  // Level 13: INTRODUCES scatter bonus spins — collect 3 scatter scrolls for an extra spin
   {
     id: 13,
     world: 2,
@@ -254,8 +266,16 @@ export const LevelConfigs: LevelDef[] = [
     hasBlockers: true,
     blockerType: 'ice',
     blockerCount: 5,
+    scatterThreshold: 3,
     starThresholds: [5000, 10000, 18000],
+    intro: {
+      title: 'Magic Scrolls!',
+      description:
+        'Collect 3 Magic Scrolls across your spins to earn a Bonus Spin! Watch the scroll counter in the top bar.',
+    },
   },
+
+  // Level 14: Scatter persists — bat collection goal
   {
     id: 14,
     world: 2,
@@ -266,10 +286,13 @@ export const LevelConfigs: LevelDef[] = [
       { type: 'collect', target: 15, symbolId: 'bat' },
       { type: 'score', target: 5000 },
     ],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'multiplier'],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
     hasBlockers: false,
+    scatterThreshold: 3,
     starThresholds: [5000, 10000, 20000],
   },
+
+  // Level 15: INTRODUCES multiplier tiles (×2 / ×3 zones on the grid)
   {
     id: 15,
     world: 2,
@@ -277,10 +300,19 @@ export const LevelConfigs: LevelDef[] = [
     spins: 7,
     movesPerSpin: 7,
     goals: [{ type: 'power_ups', target: 5 }],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter', 'multiplier'],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
     hasBlockers: false,
+    scatterThreshold: 3,
+    multiplierTileCount: 4,
     starThresholds: [6000, 12000, 22000],
+    intro: {
+      title: 'Multiplier Zones!',
+      description:
+        'Some tiles glow with ×2 or ×3 badges — matches landing on them score double or triple. Plan your swaps to hit them!',
+    },
   },
+
+  // Level 16: Multiplier tiles + ice blockers — deep freeze combo
   {
     id: 16,
     world: 2,
@@ -291,23 +323,41 @@ export const LevelConfigs: LevelDef[] = [
       { type: 'clear_blockers', target: 10 },
       { type: 'score', target: 6000 },
     ],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'multiplier'],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
     hasBlockers: true,
     blockerType: 'ice',
     blockerCount: 10,
+    scatterThreshold: 3,
+    multiplierTileCount: 6,
     starThresholds: [6000, 13000, 25000],
   },
+
+  // Level 17: INTRODUCES chain blockers — linked destruction
   {
     id: 17,
     world: 2,
     name: 'Glowshroom Garden',
     spins: 7,
     movesPerSpin: 6,
-    goals: [{ type: 'collect', target: 25, symbolId: 'mushroom' }],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter', 'multiplier'],
-    hasBlockers: false,
+    goals: [
+      { type: 'collect', target: 25, symbolId: 'mushroom' },
+      { type: 'clear_blockers', target: 4 },
+    ],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
+    hasBlockers: true,
+    hasChainBlockers: true,
+    chainBlockerCount: 4,
+    scatterThreshold: 3,
+    multiplierTileCount: 4,
     starThresholds: [7000, 14000, 28000],
+    intro: {
+      title: 'Chained Blockers!',
+      description:
+        'These blockers are linked! Breaking one weakens the next in the chain. Find the first link and work through them!',
+    },
   },
+
+  // Level 18: Chain blockers persist + power-up + cascade combo goal
   {
     id: 18,
     world: 2,
@@ -317,11 +367,18 @@ export const LevelConfigs: LevelDef[] = [
     goals: [
       { type: 'power_ups', target: 8 },
       { type: 'cascades', target: 10 },
+      { type: 'clear_blockers', target: 6 },
     ],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter', 'multiplier'],
-    hasBlockers: false,
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
+    hasBlockers: true,
+    hasChainBlockers: true,
+    chainBlockerCount: 6,
+    scatterThreshold: 3,
+    multiplierTileCount: 6,
     starThresholds: [8000, 16000, 30000],
   },
+
+  // Level 19: INTRODUCES timed moves — speed bonus scoring
   {
     id: 19,
     world: 2,
@@ -329,12 +386,22 @@ export const LevelConfigs: LevelDef[] = [
     spins: 8,
     movesPerSpin: 6,
     goals: [{ type: 'score', target: 15000 }],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter', 'multiplier'],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
     hasBlockers: true,
     blockerType: 'stone',
     blockerCount: 5,
+    scatterThreshold: 3,
+    multiplierTileCount: 6,
+    hasTimedMoves: true,
     starThresholds: [15000, 25000, 40000],
+    intro: {
+      title: 'Speed Bonus!',
+      description:
+        'Each move has a timer — swap fast for a score bonus! Watch the ring around your selection and keep the pace up.',
+    },
   },
+
+  // Level 20: BOSS — all World 2 mechanics combined
   {
     id: 20,
     world: 2,
@@ -345,12 +412,23 @@ export const LevelConfigs: LevelDef[] = [
       { type: 'score', target: 20000 },
       { type: 'power_ups', target: 10 },
       { type: 'cascades', target: 15 },
+      { type: 'clear_blockers', target: 8 },
     ],
-    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter', 'multiplier'],
+    availableSymbolIds: ['crystal', 'mushroom', 'bat', 'amethyst', 'sapphire', 'roxy', 'scatter'],
     hasBlockers: true,
     blockerType: 'stone',
-    blockerCount: 6,
+    blockerCount: 4,
+    hasChainBlockers: true,
+    chainBlockerCount: 4,
+    scatterThreshold: 3,
+    multiplierTileCount: 8,
+    hasTimedMoves: true,
     starThresholds: [20000, 35000, 50000],
+    intro: {
+      title: 'The Cavern Lord!',
+      description:
+        'Use everything you know — Wilds, Scatters, Multipliers, Chains, and speed! Defeat the guardian of the Crystal Caverns!',
+    },
   },
 ];
 
