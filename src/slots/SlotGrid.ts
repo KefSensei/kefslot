@@ -754,10 +754,21 @@ class CellSprite extends Container {
       this.addChild(puIcon);
     }
 
+    // Tile multiplier badge (×2 / ×3 zone) — drawn under the symbol
+    if (data.tileMultiplier > 1) {
+      const badge = this.createMultiplierBadge(data.tileMultiplier, cellW, cellH);
+      this.addChildAt(badge, 1); // just above background
+    }
+
     // Blocker overlay
     if (data.isBlocker) {
       const blockerOverlay = this.createBlockerOverlay(data.blockerHealth, cellW, cellH);
       this.addChild(blockerOverlay);
+      // Chain blocker: add chain link icon if part of a chain
+      if (data.chainId !== null) {
+        const chainIcon = this.createChainIcon(cellW, cellH);
+        this.addChild(chainIcon);
+      }
     }
 
     // Selection highlight
@@ -900,6 +911,43 @@ class CellSprite extends Container {
     container.addChild(text);
 
     return container;
+  }
+
+  private createMultiplierBadge(mult: number, cellW: number, cellH: number): Container {
+    const c = new Container();
+    // Glowing rounded rect badge in bottom-right corner
+    const bw = 26,
+      bh = 16;
+    const bx = cellW - bw - 2,
+      by = cellH - bh - 2;
+    const bg = new Graphics();
+    bg.roundRect(bx, by, bw, bh, 5);
+    bg.fill({ color: mult === 3 ? 0xff6b35 : 0x9b59b6, alpha: 0.85 });
+    bg.stroke({ color: mult === 3 ? 0xffcc44 : 0xd4a0ff, width: 1.5 });
+    c.addChild(bg);
+    const label = new Text({
+      text: `×${mult}`,
+      style: new TextStyle({ fontSize: 11, fill: 0xffffff, fontWeight: 'bold', fontFamily: 'monospace' }),
+    });
+    label.anchor.set(0.5);
+    label.x = bx + bw / 2;
+    label.y = by + bh / 2;
+    c.addChild(label);
+    // Gentle pulse
+    gsap.to(bg, { pixi: { alpha: 0.6 }, duration: 0.9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+    return c;
+  }
+
+  private createChainIcon(cellW: number, cellH: number): Graphics {
+    const g = new Graphics();
+    // Two interlocked circles in top-left corner — chain link symbol
+    const cx = 10,
+      cy = 10;
+    g.circle(cx - 3, cy, 5);
+    g.stroke({ color: 0xc0c0c0, width: 2, alpha: 0.9 });
+    g.circle(cx + 3, cy, 5);
+    g.stroke({ color: 0xc0c0c0, width: 2, alpha: 0.9 });
+    return g;
   }
 
   private createBlockerOverlay(health: number, cellW: number, cellH: number): Graphics {

@@ -499,4 +499,31 @@ export class MatchEffects extends Container {
     gsap.to(glow, { alpha: 0, duration: 0.8, delay: 0.3, onComplete: () => glow.destroy() });
     gsap.to(line, { alpha: 0, duration: 0.8, delay: 0.3, onComplete: () => line.destroy() });
   }
+
+  /** Floating "WILD!" text — shown when Roxy substitutes in a match */
+  showWildText(x: number, y: number): void {
+    const text = new Text({
+      text: 'WILD!',
+      style: new TextStyle({
+        fontSize: 22,
+        fill: 0xf1c40f,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        stroke: { color: 0x7d3c00, width: 4 },
+      }),
+    });
+    text.anchor.set(0.5);
+    text.x = x;
+    text.y = y - 10;
+    text.alpha = 0;
+    text.scale.set(0.6);
+    this.addChild(text);
+
+    const tl = gsap.timeline();
+    tl.to(text, { alpha: 1, duration: 0.1 }, 0);
+    tl.to(text.scale, { x: 1.3, y: 1.3, duration: 0.2, ease: 'back.out' }, 0);
+    tl.to(text.scale, { x: 1.0, y: 1.0, duration: 0.15 }, 0.2);
+    tl.to(text, { y: y - 60, duration: 0.7, ease: 'power2.out' }, 0.1);
+    tl.to(text, { alpha: 0, duration: 0.3, onComplete: () => text.destroy() }, 0.55);
+  }
 }

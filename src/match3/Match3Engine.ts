@@ -12,6 +12,8 @@ export interface SwapResult {
   score: number;
   cascades: number;
   blockersDestroyed: number;
+  scattersCleared: number;
+  wildSubstitutions: { row: number; col: number }[]; // cells where wild matched non-wild
 }
 
 export class Match3Engine {
@@ -52,7 +54,16 @@ export class Match3Engine {
   // Execute a swap and resolve all resulting matches + cascades
   async executeSwap(r1: number, c1: number, r2: number, c2: number): Promise<SwapResult> {
     if (!this.isValidSwap(r1, c1, r2, c2)) {
-      return { valid: false, matches: [], powerUpsCreated: [], score: 0, cascades: 0, blockersDestroyed: 0 };
+      return {
+        valid: false,
+        matches: [],
+        powerUpsCreated: [],
+        score: 0,
+        cascades: 0,
+        blockersDestroyed: 0,
+        scattersCleared: 0,
+        wildSubstitutions: [],
+      };
     }
 
     this.swap(r1, c1, r2, c2);
@@ -61,23 +72,48 @@ export class Match3Engine {
     let totalScore = 0;
     let cascadeLevel = 0;
     let totalBlockersDestroyed = 0;
+    let totalScattersCleared = 0;
     const allMatches: MatchGroup[] = [];
     const allPowerUps: { row: number; col: number; type: PowerUpType }[] = [];
+    const allWildSubs: { row: number; col: number }[] = [];
 
     // Resolve cascades
     let matches = this.cascade.findMatches(this.grid);
     while (matches.length > 0) {
-      const multiplier = this.cascade.getMultiplier(cascadeLevel);
+      const cascadeMultiplier = this.cascade.getMultiplier(cascadeLevel);
 
       for (const match of matches) {
-        // Score
+        // Base score for match size
         const baseScore =
           match.cells.length >= 5
             ? GameConfig.match5Score
             : match.cells.length >= 4
               ? GameConfig.match4Score
               : GameConfig.match3Score;
-        totalScore += baseScore * multiplier;
+
+        // Apply tile multipliers per-cell (bonus on top of base score)
+        let tileBonus = 0;
+        for (const pos of match.cells) {
+          const cell = this.grid[pos.row]?.[pos.col];
+          if (cell && cell.tileMultiplier > 1) {
+            // Each cell on a multiplier tile adds (multiplier-1) × per-cell share of base score
+            const perCell = baseScore / match.cells.length;
+            tileBonus += perCell * (cell.tileMultiplier - 1);
+          }
+          // Track wild substitutions
+          if (cell?.symbol.isWild && match.symbolId !== cell.symbol.id) {
+            allWildSubs.push({ row: pos.row, col: pos.col });
+          }
+        }
+
+        totalScore += (baseScore + tileBonus) * cascadeMultiplier;
+
+        // Count scatters in cleared cells
+        for (const pos of match.cells) {
+          if (this.grid[pos.row]?.[pos.col]?.symbol.isScatter) {
+            totalScattersCleared++;
+          }
+        }
 
         // Create power-ups for 4+ matches
         const powerUp = this.determinePowerUp(match);
@@ -130,6 +166,8 @@ export class Match3Engine {
       score: totalScore,
       cascades: cascadeLevel,
       blockersDestroyed: totalBlockersDestroyed,
+      scattersCleared: totalScattersCleared,
+      wildSubstitutions: allWildSubs,
     };
   }
 
@@ -179,7 +217,9 @@ export class Match3Engine {
     return { cleared, score: cleared.length * GameConfig.baseSymbolScore * 3 };
   }
 
-  /** Damage blockers adjacent to cleared cells. Returns damaged and destroyed blocker positions. */
+  /** Damage blockers adjacent to cleared cells. Returns damaged and destroyed blocker positions.
+   *  Chain blockers: when one in a chain is destroyed, deals 1 hit to the next blocker sharing the same chainId.
+   */
   damageAdjacentBlockers(clearedPositions: { row: number; col: number }[]): {
     damaged: { row: number; col: number; newHealth: number }[];
     destroyed: { row: number; col: number }[];
@@ -187,6 +227,40 @@ export class Match3Engine {
     const damaged: { row: number; col: number; newHealth: number }[] = [];
     const destroyed: { row: number; col: number }[] = [];
     const processed = new Set<string>();
+
+    const damageBlockerAt = (r: number, c: number): void => {
+      const key = `${r},${c}`;
+      if (processed.has(key)) return;
+      const cell = this.grid[r]?.[c];
+      if (!cell?.isBlocker) return;
+
+      processed.add(key);
+      cell.blockerHealth--;
+      if (cell.blockerHealth <= 0) {
+        const chainId = cell.chainId;
+        cell.isBlocker = false;
+        cell.blockerHealth = 0;
+        cell.chainId = null;
+        destroyed.push({ row: r, col: c });
+        events.emit('blockerDestroyed', { row: r, col: c, chainId });
+
+        // Chain propagation: weaken the next blocker in the same chain
+        if (chainId !== null) {
+          for (let rr = 0; rr < this.rows; rr++) {
+            for (let cc = 0; cc < this.cols; cc++) {
+              const next = this.grid[rr]?.[cc];
+              if (next?.isBlocker && next.chainId === chainId && !processed.has(`${rr},${cc}`)) {
+                damageBlockerAt(rr, cc);
+                return; // only propagate to the first surviving link
+              }
+            }
+          }
+        }
+      } else {
+        damaged.push({ row: r, col: c, newHealth: cell.blockerHealth });
+        events.emit('blockerDamaged', { row: r, col: c, newHealth: cell.blockerHealth });
+      }
+    };
 
     for (const pos of clearedPositions) {
       const neighbors = [
@@ -197,24 +271,58 @@ export class Match3Engine {
       ];
       for (const n of neighbors) {
         if (n.row < 0 || n.row >= this.rows || n.col < 0 || n.col >= this.cols) continue;
-        const key = `${n.row},${n.col}`;
-        if (processed.has(key)) continue;
-
-        const cell = this.grid[n.row]?.[n.col];
-        if (cell?.isBlocker) {
-          processed.add(key);
-          cell.blockerHealth--;
-          if (cell.blockerHealth <= 0) {
-            cell.isBlocker = false;
-            cell.blockerHealth = 0;
-            destroyed.push({ row: n.row, col: n.col });
-          } else {
-            damaged.push({ row: n.row, col: n.col, newHealth: cell.blockerHealth });
-          }
-        }
+        damageBlockerAt(n.row, n.col);
       }
     }
     return { damaged, destroyed };
+  }
+
+  /** Place multiplier tiles randomly on non-blocker cells. count/2 are ×2, remainder are ×3. */
+  placeMultiplierTiles(count: number): void {
+    const candidates: { r: number; c: number }[] = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.grid[r][c] && !this.grid[r][c]!.isBlocker) {
+          candidates.push({ r, c });
+        }
+      }
+    }
+    // Shuffle and pick `count` positions
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    const picks = candidates.slice(0, count);
+    picks.forEach((pos, i) => {
+      const cell = this.grid[pos.r][pos.c];
+      if (cell) cell.tileMultiplier = i < Math.ceil(count / 2) ? 2 : 3;
+    });
+  }
+
+  /** Preserve tileMultiplier on cells that survive a gravity/fill pass. */
+  transferTileMultipliers(snapshot: Map<string, number>): void {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.grid[r][c];
+        if (cell) {
+          cell.tileMultiplier = snapshot.get(`${r},${c}`) ?? 0;
+        }
+      }
+    }
+  }
+
+  /** Snapshot current tileMultiplier layout (call before gravity). */
+  snapshotTileMultipliers(): Map<string, number> {
+    const snap = new Map<string, number>();
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.grid[r][c];
+        if (cell && cell.tileMultiplier > 0) {
+          snap.set(`${r},${c}`, cell.tileMultiplier);
+        }
+      }
+    }
+    return snap;
   }
 
   /** Find a valid swap hint — returns the first valid adjacent pair or null */

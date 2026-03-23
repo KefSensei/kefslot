@@ -15,6 +15,10 @@ export class HUD extends Container {
   private sfxBtnIcon: Graphics;
   private _musicMuted = false;
   private _sfxMuted = false;
+  // Scatter progress indicator (World 2)
+  private scatterContainer: Container;
+  private scatterDots: Graphics[] = [];
+  private scatterLabel: Text;
 
   // Layout references for portrait repositioning
   private bg: Graphics;
@@ -213,6 +217,18 @@ export class HUD extends Container {
     this.messageText.y = GameConfig.height / 2 - 20;
     this.messageText.visible = false;
     this.addChild(this.messageText);
+
+    // Scatter progress indicator — positioned near top-right, hidden by default
+    this.scatterContainer = new Container();
+    this.scatterContainer.x = GameConfig.width - 120;
+    this.scatterContainer.y = 14;
+    this.scatterContainer.visible = false;
+    this.scatterLabel = new Text({
+      text: '✦',
+      style: new TextStyle({ fontSize: 11, fill: 0x1abc9c, fontFamily: 'monospace' }),
+    });
+    this.scatterContainer.addChild(this.scatterLabel);
+    this.addChild(this.scatterContainer);
   }
 
   /** Reposition elements for portrait (narrow) or landscape (wide) */
@@ -285,6 +301,47 @@ export class HUD extends Container {
     // Message always centered on active canvas
     this.messageText.x = w / 2;
     this.messageText.y = h / 2 - 20;
+  }
+
+  /** Show scatter progress dots (e.g. 1/3). Pass count=0 to hide. */
+  setScatterProgress(count: number, threshold: number): void {
+    this.scatterContainer.removeChildren();
+    this.scatterDots = [];
+    if (threshold <= 0) {
+      this.scatterContainer.visible = false;
+      return;
+    }
+    this.scatterContainer.visible = true;
+
+    this.scatterLabel.text = '✦';
+    this.scatterLabel.x = 0;
+    this.scatterLabel.y = -8;
+    this.scatterContainer.addChild(this.scatterLabel);
+
+    for (let i = 0; i < threshold; i++) {
+      const dot = new Graphics();
+      const filled = i < count;
+      dot.circle(0, 0, 5);
+      dot.fill({ color: filled ? 0x1abc9c : 0x2c3e50 });
+      dot.stroke({ color: 0x1abc9c, width: 1.5 });
+      dot.x = i * 14;
+      dot.y = 6;
+      this.scatterContainer.addChild(dot);
+      this.scatterDots.push(dot);
+
+      if (filled) {
+        gsap.fromTo(
+          dot.scale,
+          { x: 1, y: 1 },
+          { x: 1.4, y: 1.4, duration: 0.2, yoyo: true, repeat: 1, ease: 'back.out' },
+        );
+      }
+    }
+  }
+
+  /** Hide the scatter counter (call on level start) */
+  hideScatterProgress(): void {
+    this.scatterContainer.visible = false;
   }
 
   setScore(score: number): void {

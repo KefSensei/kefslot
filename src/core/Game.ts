@@ -79,6 +79,11 @@ export class Game {
   private collectCounts: Record<string, number> = {};
   private blockersCleared = 0;
   private hintTimer: ReturnType<typeof setTimeout> | null = null;
+  // World 2 mechanic state
+  private scatterCount = 0; // scatters collected this level
+  private bonusSpinsEarned = 0; // bonus spins granted from scatter this level
+  private timedMoveTimer: ReturnType<typeof setInterval> | null = null;
+  private timedMoveSecondsLeft = 0;
 
   constructor(app: Application) {
     this.app = app;
@@ -334,12 +339,20 @@ export class Game {
     this.blockersCleared = 0;
     this.collectCounts = {};
     this.goals = def.goals.map((g) => ({ ...g, current: 0 }));
+    this.scatterCount = 0;
+    this.bonusSpinsEarned = 0;
 
     this.hud.setLevel(def.id);
     this.hud.setScore(0);
     this.hud.setMoves(def.movesPerSpin);
     this.hud.setCoins(this.player.coins);
     this.hud.setMultiplier(1);
+    // Show scatter counter if this level has scatter threshold, otherwise hide
+    if (def.scatterThreshold) {
+      this.hud.setScatterProgress(0, def.scatterThreshold);
+    } else {
+      this.hud.hideScatterProgress();
+    }
     this.updateGoalDisplay();
 
     // Start music (lead vocals only, stems layer in as score grows)
@@ -399,6 +412,8 @@ export class Game {
       this.match3.setGrid(gridData);
     }
 
+    this.placeLevelMultiplierTiles();
+
     // Cascade resolve phase
     this.fsm.transition('CASCADE_RESOLVE');
     await this.resolveCascades();
@@ -450,6 +465,8 @@ export class Game {
       }
       this.match3.setGrid(gridData);
     }
+
+    this.placeLevelMultiplierTiles();
 
     // Cascade resolve phase - auto-resolve pre-existing matches
     this.fsm.transition('CASCADE_RESOLVE');
@@ -611,6 +628,42 @@ export class Game {
         this.collectCounts[match.symbolId] = (this.collectCounts[match.symbolId] || 0) + 1;
       }
     }
+
+    // Wild substitution SFX + floating "WILD!" text
+    if (result.wildSubstitutions.length > 0) {
+      this.sfx.play('wildMatch');
+      const effects = this.slotGrid.getEffects();
+      for (const pos of result.wildSubstitutions) {
+        const worldPos = this.slotGrid.getCellPosition(pos.row, pos.col);
+        if (worldPos) effects.showWildText(worldPos.x, worldPos.y);
+      }
+    }
+
+    // Scatter tracking
+    if (result.scattersCleared > 0 && this.currentLevelDef?.scatterThreshold) {
+      this.scatterCount += result.scattersCleared;
+      this.sfx.play('scatterCollect');
+      const threshold = this.currentLevelDef.scatterThreshold;
+      this.hud.setScatterProgress(this.scatterCount, threshold);
+      // Award bonus spins when threshold is crossed
+      while (this.scatterCount >= threshold * (this.bonusSpinsEarned + 1)) {
+        this.bonusSpinsEarned++;
+        this.spinsRemaining++;
+        this.sfx.play('bonusSpin');
+        this.hud.showMessage('BONUS SPIN! 🎉', 2000);
+        this.spinButton.setEnabled(true);
+        this.spinButton.setText('SPIN');
+      }
+    }
+
+    // Tile multiplier SFX — if any cells in matches had a tile multiplier
+    const hasTileBonus = result.matches.some((m) =>
+      m.cells.some((pos) => {
+        const cell = this.match3.getGrid()[pos.row]?.[pos.col];
+        return cell && cell.tileMultiplier > 1;
+      }),
+    );
+    if (hasTileBonus) this.sfx.play('multiplierHit');
 
     this.updateGoalProgress();
 
@@ -867,6 +920,45 @@ export class Game {
         idx++;
       }
     }
+
+    // Place chain blockers (linked pairs — each pair shares a unique chainId)
+    if (def.hasChainBlockers && (def.chainBlockerCount ?? 0) > 0) {
+      this.placeChainBlockers(grid, def.chainBlockerCount!);
+    }
+  }
+
+  private placeChainBlockers(grid: (CellData | null)[][], count: number): void {
+    // Collect non-blocker positions to place chain blockers into
+    const free: { r: number; c: number }[] = [];
+    for (let r = 0; r < GameConfig.rows; r++) {
+      for (let c = 0; c < GameConfig.cols; c++) {
+        if (grid[r][c] && !grid[r][c]!.isBlocker) free.push({ r, c });
+      }
+    }
+    for (let i = free.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [free[i], free[j]] = [free[j], free[i]];
+    }
+
+    // Place in pairs sharing a chainId (stone health = 2 so chain requires 2 hits total per link)
+    const toPick = Math.min(count, free.length);
+    for (let i = 0; i < toPick; i += 2) {
+      const chainId = i / 2;
+      for (let j = i; j < Math.min(i + 2, toPick); j++) {
+        const { r, c } = free[j];
+        const cell = grid[r][c];
+        if (cell) {
+          cell.isBlocker = true;
+          cell.blockerHealth = 1; // chain blockers take 1 hit each
+          cell.chainId = chainId;
+        }
+      }
+    }
+  }
+
+  private placeLevelMultiplierTiles(): void {
+    const count = this.currentLevelDef?.multiplierTileCount ?? 0;
+    if (count > 0) this.match3.placeMultiplierTiles(count);
   }
 
   private endMatchPhase(): void {
