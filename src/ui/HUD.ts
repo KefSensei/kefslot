@@ -2,6 +2,11 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import gsap from 'gsap';
 
+export interface GoalStatus {
+  label: string;
+  done: boolean;
+}
+
 export class HUD extends Container {
   private scoreText: Text;
   private movesText: Text;
@@ -28,6 +33,10 @@ export class HUD extends Container {
   private coinC: Text;
   private musicBtn: Container;
   private sfxBtn: Container;
+  private mechanicBar: Container;
+  private mechanicText: Text;
+  private goalsBar: Container;
+  private _lastGoals: GoalStatus[] = [];
 
   onMusicToggle: ((muted: boolean) => void) | null = null;
   onSfxToggle: ((muted: boolean) => void) | null = null;
@@ -65,7 +74,7 @@ export class HUD extends Container {
     // Gold accent line at bottom
     this.accentLine = new Graphics();
     this.accentLine.rect(0, 58, GameConfig.width, 2);
-    this.accentLine.fill({ color: 0xD4AF37, alpha: 0.6 });
+    this.accentLine.fill({ color: 0xd4af37, alpha: 0.6 });
     this.addChild(this.accentLine);
 
     // Level
@@ -109,12 +118,15 @@ export class HUD extends Container {
     this.multLabel.x = 480;
     this.multLabel.y = 6;
     this.addChild(this.multLabel);
-    this.multiplierText = new Text({ text: 'x1', style: new TextStyle({
-      fontSize: 24,
-      fill: 0xff6b6b,
-      fontWeight: 'bold',
-      fontFamily: 'monospace',
-    })});
+    this.multiplierText = new Text({
+      text: 'x1',
+      style: new TextStyle({
+        fontSize: 24,
+        fill: 0xff6b6b,
+        fontWeight: 'bold',
+        fontFamily: 'monospace',
+      }),
+    });
     this.multiplierText.x = 480;
     this.multiplierText.y = 22;
     this.addChild(this.multiplierText);
@@ -127,21 +139,27 @@ export class HUD extends Container {
 
     this.coinIcon = new Graphics();
     this.coinIcon.circle(630, 36, 10);
-    this.coinIcon.fill({ color: 0xD4AF37 });
-    this.coinIcon.stroke({ color: 0xF5D060, width: 1.5 });
+    this.coinIcon.fill({ color: 0xd4af37 });
+    this.coinIcon.stroke({ color: 0xf5d060, width: 1.5 });
     this.addChild(this.coinIcon);
-    this.coinC = new Text({ text: 'C', style: new TextStyle({ fontSize: 11, fill: 0x8B7332, fontWeight: 'bold', fontFamily: 'monospace' }) });
+    this.coinC = new Text({
+      text: 'C',
+      style: new TextStyle({ fontSize: 11, fill: 0x8b7332, fontWeight: 'bold', fontFamily: 'monospace' }),
+    });
     this.coinC.anchor.set(0.5);
     this.coinC.x = 630;
     this.coinC.y = 36;
     this.addChild(this.coinC);
 
-    this.coinsText = new Text({ text: '1000', style: new TextStyle({
-      fontSize: 20,
-      fill: 0xf39c12,
-      fontWeight: 'bold',
-      fontFamily: 'monospace',
-    })});
+    this.coinsText = new Text({
+      text: '1000',
+      style: new TextStyle({
+        fontSize: 20,
+        fill: 0xf39c12,
+        fontWeight: 'bold',
+        fontFamily: 'monospace',
+      }),
+    });
     this.coinsText.x = 650;
     this.coinsText.y = 24;
     this.addChild(this.coinsText);
@@ -184,18 +202,47 @@ export class HUD extends Container {
     });
     this.addChild(this.sfxBtn);
 
+    // Mechanic status bar (below HUD bar, shows active mechanic info)
+    this.mechanicBar = new Container();
+    this.mechanicBar.y = 62;
+    this.mechanicBar.visible = false;
+    this.addChild(this.mechanicBar);
+
+    this.mechanicText = new Text({
+      text: '',
+      style: new TextStyle({
+        fontSize: 11,
+        fill: 0xccbbdd,
+        fontFamily: 'monospace',
+        letterSpacing: 1,
+      }),
+    });
+    this.mechanicText.x = 10;
+    this.mechanicText.y = 2;
+    this.mechanicBar.addChild(this.mechanicText);
+
+    // Goals bar (below HUD bar, always visible during gameplay)
+    this.goalsBar = new Container();
+    this.goalsBar.y = 60;
+    this.addChild(this.goalsBar);
+
     // Message (centered on slot grid)
-    this.messageText = new Text({ text: '', style: new TextStyle({
-      fontSize: 20,
-      fill: 0xf1c40f,
-      fontWeight: 'bold',
-      fontFamily: 'Segoe UI, sans-serif',
-      dropShadow: {
-        color: 0x000000,
-        distance: 2,
-        alpha: 1,
-      },
-    })});
+    this.messageText = new Text({
+      text: '',
+      style: new TextStyle({
+        fontSize: 36,
+        fill: 0xf1c40f,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        stroke: { color: 0x000000, width: 6 },
+        dropShadow: {
+          color: 0x000000,
+          distance: 3,
+          blur: 8,
+          alpha: 1,
+        },
+      }),
+    });
     this.messageText.anchor.set(0.5);
     this.messageText.x = GameConfig.width / 2;
     this.messageText.y = GameConfig.height / 2 - 20;
@@ -215,7 +262,7 @@ export class HUD extends Container {
 
     this.accentLine.clear();
     this.accentLine.rect(0, 58, w, 2);
-    this.accentLine.fill({ color: 0xD4AF37, alpha: 0.6 });
+    this.accentLine.fill({ color: 0xd4af37, alpha: 0.6 });
 
     if (isPortrait) {
       // Compact layout for ~500px width
@@ -273,6 +320,9 @@ export class HUD extends Container {
     // Message always centered on active canvas
     this.messageText.x = w / 2;
     this.messageText.y = h / 2 - 20;
+
+    // Re-render goals bar with updated width
+    if (this._lastGoals.length) this.setGoals(this._lastGoals);
   }
 
   setScore(score: number): void {
@@ -306,9 +356,10 @@ export class HUD extends Container {
   setMultiplier(mult: number): void {
     this.multiplierText.text = `x${mult}`;
     if (mult > 1) {
-      gsap.fromTo(this.multiplierText.scale,
+      gsap.fromTo(
+        this.multiplierText.scale,
         { x: 1, y: 1 },
-        { x: 1.3, y: 1.3, duration: 0.15, yoyo: true, repeat: 1, ease: 'back.out' }
+        { x: 1.3, y: 1.3, duration: 0.15, yoyo: true, repeat: 1, ease: 'back.out' },
       );
     }
   }
@@ -335,6 +386,82 @@ export class HUD extends Container {
   setSfxMuted(muted: boolean): void {
     this._sfxMuted = muted;
     this.drawSfxIcon(muted);
+  }
+
+  /** Show level goals with live progress as compact chips below the HUD bar */
+  setGoals(goals: GoalStatus[]): void {
+    this._lastGoals = goals;
+    this.goalsBar.removeChildren();
+    if (!goals.length) return;
+
+    const w = GameConfig.activeWidth;
+
+    // Background strip
+    const stripH = 28;
+    const bg = new Graphics();
+    bg.rect(0, 0, w, stripH);
+    bg.fill({ color: 0x120830, alpha: 0.95 });
+    this.goalsBar.addChild(bg);
+
+    // Subtle top highlight and bottom border
+    const topLine = new Graphics();
+    topLine.rect(0, 0, w, 1);
+    topLine.fill({ color: 0xd4af37, alpha: 0.25 });
+    this.goalsBar.addChild(topLine);
+
+    const botLine = new Graphics();
+    botLine.rect(0, stripH - 1, w, 1);
+    botLine.fill({ color: 0x6a4a9a, alpha: 0.6 });
+    this.goalsBar.addChild(botLine);
+
+    // Center goals horizontally when there's only one
+    const allGoals = goals;
+    const centerX = w / 2;
+
+    // First pass: build texts to measure total width
+    const texts = allGoals.map(
+      (g) =>
+        new Text({
+          text: (g.done ? '✓  ' : '') + g.label,
+          style: new TextStyle({
+            fontSize: 13,
+            fill: g.done ? 0x2ecc71 : 0xf0e0ff,
+            fontWeight: 'bold',
+            fontFamily: 'monospace',
+            letterSpacing: 1,
+            dropShadow: g.done ? undefined : { color: 0x000000, distance: 1, alpha: 0.8 },
+          }),
+        }),
+    );
+
+    const gapW = 28;
+    const totalW = texts.reduce((s, t, i) => s + t.width + (i < texts.length - 1 ? gapW : 0), 0);
+    let x = Math.max(14, centerX - totalW / 2);
+
+    texts.forEach((chipText, i) => {
+      chipText.y = (stripH - chipText.height) / 2;
+      chipText.x = x;
+      this.goalsBar.addChild(chipText);
+      x += chipText.width;
+
+      if (i < texts.length - 1) {
+        const divider = new Graphics();
+        divider.rect(x + gapW / 2 - 1, 6, 1, stripH - 12);
+        divider.fill({ color: 0x6a4a9a, alpha: 0.6 });
+        this.goalsBar.addChild(divider);
+        x += gapW;
+      }
+    });
+  }
+
+  /** Show active mechanic status info (combo streak, blizzard, swap budget, etc.) */
+  setMechanicInfo(info: string | null): void {
+    if (info) {
+      this.mechanicText.text = info;
+      this.mechanicBar.visible = true;
+    } else {
+      this.mechanicBar.visible = false;
+    }
   }
 
   private drawSfxIcon(muted: boolean): void {

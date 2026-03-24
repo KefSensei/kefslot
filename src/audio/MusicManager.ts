@@ -11,23 +11,20 @@ import stem7Url from './Finding Roxy Stems/7 Synth.mp3';
 import stem8Url from './Finding Roxy Stems/8 Other.mp3';
 import stem9Url from './Finding Roxy Stems/9 Brass.mp3';
 
-const STEM_URLS = [
-  stem0Url, stem1Url, stem2Url, stem3Url, stem4Url,
-  stem5Url, stem6Url, stem7Url, stem8Url, stem9Url,
-];
+const STEM_URLS = [stem0Url, stem1Url, stem2Url, stem3Url, stem4Url, stem5Url, stem6Url, stem7Url, stem8Url, stem9Url];
 
 // Progress thresholds: when ratio >= threshold, the stem becomes audible
 const STEM_THRESHOLDS = [
-  0,     // 0: Lead Vocals — always on
-  0.1,   // 1: Backing Vocals
-  0.1,   // 2: Drums
-  0.25,  // 3: Bass
-  0.4,   // 4: Guitar
-  0.4,   // 5: Keyboard
-  0.55,  // 6: Percussion
-  0.7,   // 7: Synth
-  0.85,  // 8: Other
-  0.95,  // 9: Brass — full song
+  0, // 0: Lead Vocals — always on
+  0.1, // 1: Backing Vocals
+  0.1, // 2: Drums
+  0.25, // 3: Bass
+  0.4, // 4: Guitar
+  0.4, // 5: Keyboard
+  0.55, // 6: Percussion
+  0.7, // 7: Synth
+  0.85, // 8: Other
+  0.95, // 9: Brass — full song
 ];
 
 const FADE_MS = 800;
@@ -38,6 +35,7 @@ export class MusicManager {
   private active: boolean[] = [];
   private loaded = false;
   private playing = false;
+  private _muted = false;
 
   /** Preload all stems (call after a user gesture) */
   load(): void {
@@ -71,8 +69,10 @@ export class MusicManager {
       this.stems[i].play();
     }
 
-    // Fade in lead vocals
-    this.stems[0].fade(0, STEM_VOLUME, FADE_MS);
+    // Fade in lead vocals (only if not muted)
+    if (!this._muted) {
+      this.stems[0].fade(0, STEM_VOLUME, FADE_MS);
+    }
     this.active[0] = true;
   }
 
@@ -85,7 +85,7 @@ export class MusicManager {
 
       if (ratio >= STEM_THRESHOLDS[i]) {
         this.active[i] = true;
-        this.stems[i].fade(0, STEM_VOLUME, FADE_MS);
+        if (!this._muted) this.stems[i].fade(0, STEM_VOLUME, FADE_MS);
       }
     }
   }
@@ -95,6 +95,15 @@ export class MusicManager {
     this.stopPlayback();
     this.playing = false;
     this.active = this.active.map(() => false);
+  }
+
+  setMuted(muted: boolean): void {
+    this._muted = muted;
+    // Mute/unmute stems individually — never use Howler.mute() globally
+    // as that would also silence SFX which has its own mute control.
+    for (const stem of this.stems) {
+      stem.mute(muted);
+    }
   }
 
   private stopPlayback(): void {

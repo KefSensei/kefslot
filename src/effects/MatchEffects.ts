@@ -1,5 +1,75 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import gsap from 'gsap';
+import { getPowerUpActivateTexture } from '@/slots/SlotGrid';
+
+import confetti1Url from '@/assets/sprites/particle-confetti-1.png';
+import confetti2Url from '@/assets/sprites/particle-confetti-2.png';
+import confetti3Url from '@/assets/sprites/particle-confetti-3.png';
+import confetti4Url from '@/assets/sprites/particle-confetti-4.png';
+import cascadeBurstUrl from '@/assets/sprites/particle-cascade-burst.png';
+import lava1Url from '@/assets/sprites/particle-lava-1.png';
+import lava2Url from '@/assets/sprites/particle-lava-2.png';
+import lava3Url from '@/assets/sprites/particle-lava-3.png';
+import lava4Url from '@/assets/sprites/particle-lava-4.png';
+import fogWispUrl from '@/assets/sprites/particle-fog-wisp.png';
+import curseSmokeUrl from '@/assets/sprites/particle-curse-smoke.png';
+import portalSwirlUrl from '@/assets/sprites/particle-portal-swirl.png';
+import starRatingUrl from '@/assets/sprites/effect-star-rating.png';
+import coinCollectUrl from '@/assets/sprites/effect-coin-collect.png';
+import levelupBurstUrl from '@/assets/sprites/effect-levelup-burst.png';
+
+let effectTextures: {
+  confetti: Texture[];
+  cascadeBurst: Texture | null;
+  lava: Texture[];
+  fogWisp: Texture | null;
+  curseSmoke: Texture | null;
+  portalSwirl: Texture | null;
+  starRating: Texture | null;
+  coinCollect: Texture | null;
+  levelupBurst: Texture | null;
+} = {
+  confetti: [],
+  cascadeBurst: null,
+  lava: [],
+  fogWisp: null,
+  curseSmoke: null,
+  portalSwirl: null,
+  starRating: null,
+  coinCollect: null,
+  levelupBurst: null,
+};
+
+export async function loadEffectTextures(): Promise<void> {
+  const [c1, c2, c3, c4, burst, l1, l2, l3, l4, fog, curse, portal, star, coin, levelup] = await Promise.all([
+    Assets.load<Texture>(confetti1Url),
+    Assets.load<Texture>(confetti2Url),
+    Assets.load<Texture>(confetti3Url),
+    Assets.load<Texture>(confetti4Url),
+    Assets.load<Texture>(cascadeBurstUrl),
+    Assets.load<Texture>(lava1Url),
+    Assets.load<Texture>(lava2Url),
+    Assets.load<Texture>(lava3Url),
+    Assets.load<Texture>(lava4Url),
+    Assets.load<Texture>(fogWispUrl),
+    Assets.load<Texture>(curseSmokeUrl),
+    Assets.load<Texture>(portalSwirlUrl),
+    Assets.load<Texture>(starRatingUrl),
+    Assets.load<Texture>(coinCollectUrl),
+    Assets.load<Texture>(levelupBurstUrl),
+  ]);
+  effectTextures = {
+    confetti: [c1, c2, c3, c4],
+    cascadeBurst: burst,
+    lava: [l1, l2, l3, l4],
+    fogWisp: fog,
+    curseSmoke: curse,
+    portalSwirl: portal,
+    starRating: star,
+    coinCollect: coin,
+    levelupBurst: levelup,
+  };
+}
 
 /**
  * Enhanced confetti, floating scores, win lines, screen flash, power-up effects.
@@ -7,54 +77,70 @@ import gsap from 'gsap';
 export class MatchEffects extends Container {
   /** Spawn confetti particles at the given world positions */
   spawnConfetti(positions: { x: number; y: number }[], color: number): void {
-    const colors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xF5D060];
+    const fallbackColors = [color, 0xf1c40f, 0xe74c3c, 0x2ecc71, 0x3498db, 0xff69b4, 0xf5d060];
+    const useSprites = effectTextures.confetti.length > 0;
+
     for (const pos of positions) {
       const count = 10;
       for (let i = 0; i < count; i++) {
-        const p = new Graphics();
-        const c = colors[Math.floor(Math.random() * colors.length)];
-        const size = 3 + Math.random() * 6;
-        const shapeRoll = Math.random();
-        if (shapeRoll < 0.33) {
-          p.rect(-size / 2, -size / 2, size, size);
-        } else if (shapeRoll < 0.66) {
-          p.circle(0, 0, size / 2);
-        } else {
-          // Triangle confetti
-          p.moveTo(0, -size / 2);
-          p.lineTo(size / 2, size / 2);
-          p.lineTo(-size / 2, size / 2);
-          p.closePath();
-        }
-        p.fill({ color: c });
-        p.x = pos.x;
-        p.y = pos.y;
-        p.rotation = Math.random() * Math.PI * 2;
-        this.addChild(p);
-
         const angle = Math.random() * Math.PI * 2;
         const dist = 50 + Math.random() * 100;
         const tx = pos.x + Math.cos(angle) * dist;
         const ty = pos.y + Math.sin(angle) * dist - 40;
 
-        gsap.to(p, {
-          x: tx,
-          y: ty,
-          alpha: 0,
-          rotation: p.rotation + (Math.random() - 0.5) * 8,
-          duration: 0.7 + Math.random() * 0.5,
-          ease: 'power2.out',
-          onComplete: () => {
-            p.destroy();
-          },
-        });
-        gsap.to(p.scale, {
-          x: 0,
-          y: 0,
-          duration: 0.5 + Math.random() * 0.3,
-          delay: 0.3,
-          ease: 'power2.in',
-        });
+        if (useSprites) {
+          const tex = effectTextures.confetti[i % effectTextures.confetti.length];
+          const p = new Sprite(tex);
+          const sz = 8 + Math.random() * 10;
+          p.width = sz;
+          p.height = sz;
+          p.anchor.set(0.5);
+          p.x = pos.x;
+          p.y = pos.y;
+          p.rotation = Math.random() * Math.PI * 2;
+          p.tint = fallbackColors[Math.floor(Math.random() * fallbackColors.length)];
+          this.addChild(p);
+          gsap.to(p, {
+            x: tx,
+            y: ty,
+            alpha: 0,
+            rotation: p.rotation + (Math.random() - 0.5) * 8,
+            duration: 0.7 + Math.random() * 0.5,
+            ease: 'power2.out',
+            onComplete: () => p.destroy(),
+          });
+          gsap.to(p.scale, { x: 0, y: 0, duration: 0.5 + Math.random() * 0.3, delay: 0.3, ease: 'power2.in' });
+        } else {
+          const p = new Graphics();
+          const c = fallbackColors[Math.floor(Math.random() * fallbackColors.length)];
+          const size = 3 + Math.random() * 6;
+          const shapeRoll = Math.random();
+          if (shapeRoll < 0.33) {
+            p.rect(-size / 2, -size / 2, size, size);
+          } else if (shapeRoll < 0.66) {
+            p.circle(0, 0, size / 2);
+          } else {
+            p.moveTo(0, -size / 2);
+            p.lineTo(size / 2, size / 2);
+            p.lineTo(-size / 2, size / 2);
+            p.closePath();
+          }
+          p.fill({ color: c });
+          p.x = pos.x;
+          p.y = pos.y;
+          p.rotation = Math.random() * Math.PI * 2;
+          this.addChild(p);
+          gsap.to(p, {
+            x: tx,
+            y: ty,
+            alpha: 0,
+            rotation: p.rotation + (Math.random() - 0.5) * 8,
+            duration: 0.7 + Math.random() * 0.5,
+            ease: 'power2.out',
+            onComplete: () => p.destroy(),
+          });
+          gsap.to(p.scale, { x: 0, y: 0, duration: 0.5 + Math.random() * 0.3, delay: 0.3, ease: 'power2.in' });
+        }
       }
     }
   }
@@ -94,6 +180,23 @@ export class MatchEffects extends Container {
 
   /** Show cascade multiplier burst with expanding ring */
   showCascadeBurst(x: number, y: number, multiplier: number): void {
+    // Sprite burst flash
+    if (effectTextures.cascadeBurst) {
+      const burst = new Sprite(effectTextures.cascadeBurst);
+      burst.anchor.set(0.5);
+      burst.x = x;
+      burst.y = y;
+      burst.width = 160;
+      burst.height = 160;
+      burst.alpha = 0;
+      burst.scale.set(0.4);
+      this.addChild(burst);
+      const btl = gsap.timeline({ onComplete: () => burst.destroy() });
+      btl.to(burst, { alpha: 0.9, duration: 0.1 }, 0);
+      btl.to(burst.scale, { x: 1.2, y: 1.2, duration: 0.25, ease: 'power2.out' }, 0);
+      btl.to(burst, { alpha: 0, duration: 0.3, ease: 'power2.in' }, 0.2);
+    }
+
     // Expanding ring
     const ring = new Graphics();
     ring.circle(0, 0, 20);
@@ -149,6 +252,164 @@ export class MatchEffects extends Container {
     gsap.to(flash, { alpha: 0, duration: 0.4, ease: 'power2.out', onComplete: () => flash.destroy() });
   }
 
+  // ─────────────────────────────────────────────
+  // Mechanic particle effects
+  // ─────────────────────────────────────────────
+
+  /** Spawn lava bubble particles erupting from a cell position */
+  spawnLavaParticles(x: number, y: number, count = 5): void {
+    const textures = effectTextures.lava;
+    for (let i = 0; i < count; i++) {
+      if (textures.length > 0) {
+        const tex = textures[i % textures.length];
+        const p = new Sprite(tex);
+        const sz = 12 + Math.random() * 16;
+        p.width = sz;
+        p.height = sz;
+        p.anchor.set(0.5);
+        p.x = x + (Math.random() - 0.5) * 30;
+        p.y = y;
+        p.alpha = 0.85;
+        this.addChild(p);
+        gsap.to(p, {
+          y: y - 40 - Math.random() * 30,
+          alpha: 0,
+          duration: 0.5 + Math.random() * 0.3,
+          ease: 'power2.out',
+          onComplete: () => p.destroy(),
+        });
+      }
+    }
+  }
+
+  /** Spawn fog wisp particles drifting from a cell position */
+  spawnFogParticles(x: number, y: number, count = 3): void {
+    for (let i = 0; i < count; i++) {
+      if (effectTextures.fogWisp) {
+        const p = new Sprite(effectTextures.fogWisp);
+        const sz = 20 + Math.random() * 20;
+        p.width = sz;
+        p.height = sz;
+        p.anchor.set(0.5);
+        p.x = x + (Math.random() - 0.5) * 40;
+        p.y = y + (Math.random() - 0.5) * 20;
+        p.alpha = 0.5;
+        this.addChild(p);
+        gsap.to(p, {
+          x: p.x + (Math.random() - 0.5) * 60,
+          y: p.y - 30,
+          alpha: 0,
+          duration: 1.0 + Math.random() * 0.5,
+          ease: 'power1.out',
+          onComplete: () => p.destroy(),
+        });
+      }
+    }
+  }
+
+  /** Spawn curse smoke particles rising from a cell position */
+  spawnCurseParticles(x: number, y: number, count = 4): void {
+    for (let i = 0; i < count; i++) {
+      if (effectTextures.curseSmoke) {
+        const p = new Sprite(effectTextures.curseSmoke);
+        const sz = 16 + Math.random() * 18;
+        p.width = sz;
+        p.height = sz;
+        p.anchor.set(0.5);
+        p.x = x + (Math.random() - 0.5) * 25;
+        p.y = y;
+        p.alpha = 0.7;
+        this.addChild(p);
+        gsap.to(p, {
+          y: y - 50 - Math.random() * 20,
+          x: p.x + (Math.random() - 0.5) * 30,
+          alpha: 0,
+          duration: 0.8 + Math.random() * 0.4,
+          ease: 'power1.out',
+          onComplete: () => p.destroy(),
+        });
+      }
+    }
+  }
+
+  /** Spawn portal swirl particles around a cell position */
+  spawnPortalParticles(x: number, y: number, count = 5): void {
+    for (let i = 0; i < count; i++) {
+      if (effectTextures.portalSwirl) {
+        const p = new Sprite(effectTextures.portalSwirl);
+        const sz = 14 + Math.random() * 14;
+        p.width = sz;
+        p.height = sz;
+        p.anchor.set(0.5);
+        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+        const r = 20 + Math.random() * 20;
+        p.x = x + Math.cos(angle) * r;
+        p.y = y + Math.sin(angle) * r;
+        p.alpha = 0.8;
+        this.addChild(p);
+        gsap.to(p, { x: x, y: y, alpha: 0, duration: 0.6, ease: 'power2.in', onComplete: () => p.destroy() });
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // UI effect sprites
+  // ─────────────────────────────────────────────
+
+  /** Show the 3-star rating burst at a position (e.g. level complete screen) */
+  showStarRatingBurst(x: number, y: number): void {
+    if (!effectTextures.starRating) return;
+    const spr = new Sprite(effectTextures.starRating);
+    spr.anchor.set(0.5);
+    spr.x = x;
+    spr.y = y;
+    spr.width = 300;
+    spr.height = 150;
+    spr.alpha = 0;
+    spr.scale.set(0.5);
+    this.addChild(spr);
+    const tl = gsap.timeline({ onComplete: () => spr.destroy() });
+    tl.to(spr, { alpha: 1, duration: 0.2, ease: 'power3.out' }, 0);
+    tl.to(spr.scale, { x: 1.05, y: 1.05, duration: 0.3, ease: 'back.out' }, 0);
+    tl.to(spr, { alpha: 0, duration: 0.5, ease: 'power2.in' }, 1.2);
+  }
+
+  /** Coin collect burst at a position */
+  showCoinCollectBurst(x: number, y: number): void {
+    if (!effectTextures.coinCollect) return;
+    const spr = new Sprite(effectTextures.coinCollect);
+    spr.anchor.set(0.5);
+    spr.x = x;
+    spr.y = y;
+    spr.width = 180;
+    spr.height = 180;
+    spr.alpha = 0;
+    spr.scale.set(0.3);
+    this.addChild(spr);
+    const tl = gsap.timeline({ onComplete: () => spr.destroy() });
+    tl.to(spr, { alpha: 0.9, duration: 0.15, ease: 'power3.out' }, 0);
+    tl.to(spr.scale, { x: 1, y: 1, duration: 0.25, ease: 'back.out' }, 0);
+    tl.to(spr, { alpha: 0, y: y - 40, duration: 0.4, ease: 'power2.in' }, 0.5);
+  }
+
+  /** Level-up burst at a position */
+  showLevelUpBurst(x: number, y: number): void {
+    if (!effectTextures.levelupBurst) return;
+    const spr = new Sprite(effectTextures.levelupBurst);
+    spr.anchor.set(0.5);
+    spr.x = x;
+    spr.y = y;
+    spr.width = 320;
+    spr.height = 320;
+    spr.alpha = 0;
+    spr.scale.set(0.2);
+    this.addChild(spr);
+    const tl = gsap.timeline({ onComplete: () => spr.destroy() });
+    tl.to(spr, { alpha: 1, duration: 0.2, ease: 'power3.out' }, 0);
+    tl.to(spr.scale, { x: 1.1, y: 1.1, duration: 0.35, ease: 'back.out' }, 0);
+    tl.to(spr, { alpha: 0, duration: 0.5, ease: 'power2.in' }, 1.0);
+  }
+
   /** Screen shake — temporarily jolts the parent container */
   screenShake(intensity = 6, duration = 0.35): void {
     const target = this.parent;
@@ -194,7 +455,8 @@ export class MatchEffects extends Container {
           onComplete: () => p.destroy(),
         });
         gsap.to(p.scale, {
-          x: 0, y: 0,
+          x: 0,
+          y: 0,
           duration: 0.3 + Math.random() * 0.2,
           delay: 0.15,
           ease: 'power2.in',
@@ -203,11 +465,31 @@ export class MatchEffects extends Container {
     }
   }
 
+  /** Spawn a brief activation sprite flash centered at (x, y) */
+  private spawnActivationFlash(type: string, x: number, y: number, size = 200): void {
+    const tex = getPowerUpActivateTexture(type);
+    if (!tex) return;
+    const spr = new Sprite(tex);
+    spr.anchor.set(0.5);
+    spr.x = x;
+    spr.y = y;
+    spr.width = size;
+    spr.height = size;
+    spr.alpha = 0;
+    spr.scale.set(0.3);
+    this.addChild(spr);
+    const tl = gsap.timeline({ onComplete: () => spr.destroy() });
+    tl.to(spr, { alpha: 0.85, duration: 0.12, ease: 'power3.out' }, 0);
+    tl.to(spr.scale, { x: 1.1, y: 1.1, duration: 0.12, ease: 'power3.out' }, 0);
+    tl.to(spr, { alpha: 0, duration: 0.3, ease: 'power2.in' }, 0.12);
+  }
+
   /** Blast power-up activation: bright line sweep + particle trail + screen shake */
   showBlastEffect(positions: { x: number; y: number }[], isRow: boolean): void {
     if (positions.length === 0) return;
     const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
     const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+    this.spawnActivationFlash('blast', cx, cy, 220);
 
     // Bright sweep line
     const line = new Graphics();
@@ -265,6 +547,7 @@ export class MatchEffects extends Container {
 
   /** Bomb power-up activation: expanding rings + shrapnel + screen shake */
   showBombEffect(x: number, y: number): void {
+    this.spawnActivationFlash('bomb', x, y, 240);
     // Multiple expanding rings with stagger
     for (let i = 0; i < 4; i++) {
       const ring = new Graphics();
@@ -328,7 +611,8 @@ export class MatchEffects extends Container {
         onComplete: () => p.destroy(),
       });
       gsap.to(p.scale, {
-        x: 0, y: 0,
+        x: 0,
+        y: 0,
         duration: 0.4 + Math.random() * 0.2,
         delay: 0.2,
         ease: 'power2.in',
@@ -341,6 +625,11 @@ export class MatchEffects extends Container {
 
   /** Rainbow power-up activation: rainbow-colored stars + sparkle connections */
   showRainbowEffect(positions: { x: number; y: number }[]): void {
+    if (positions.length > 0) {
+      const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+      const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+      this.spawnActivationFlash('rainbow', cx, cy, 280);
+    }
     const rainbowColors = [0xff0000, 0xff8800, 0xffff00, 0x00ff00, 0x0088ff, 0x8800ff, 0xff00ff];
 
     for (let i = 0; i < positions.length; i++) {

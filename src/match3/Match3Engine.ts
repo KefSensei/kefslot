@@ -4,6 +4,7 @@ import { GameConfig } from '@/config/GameConfig';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { weightedRandom } from '@/utils/MathUtils';
 import { events } from '@/core/EventBus';
+import { MechanicsEngine, MechanicEvent } from '@/mechanics/MechanicsEngine';
 
 export interface SwapResult {
   valid: boolean;
@@ -12,14 +13,20 @@ export interface SwapResult {
   score: number;
   cascades: number;
   blockersDestroyed: number;
+  mechanicEvents: MechanicEvent[];
 }
 
 export class Match3Engine {
   private cascade = new CascadeEngine();
+  private mechanics = new MechanicsEngine();
   private grid: (CellData | null)[][] = [];
   private rows = GameConfig.rows;
   private cols = GameConfig.cols;
   private currentLevel = 1;
+
+  getMechanics(): MechanicsEngine {
+    return this.mechanics;
+  }
 
   getGrid(): (CellData | null)[][] {
     return this.grid;
@@ -27,10 +34,25 @@ export class Match3Engine {
 
   setGrid(grid: (CellData | null)[][]): void {
     this.grid = grid;
+    this.mechanics.setGrid(grid);
   }
 
   setLevel(level: number): void {
     this.currentLevel = level;
+  }
+
+  /** Set the active LevelDef for mechanics engine */
+  setLevelDef(levelDef: import('@/models/Level').LevelDef): void {
+    this.mechanics.setLevel(levelDef);
+    this.currentLevel = levelDef.id;
+    // Update grid dimensions if custom
+    if (levelDef.gridSize) {
+      this.rows = levelDef.gridSize.rows;
+      this.cols = levelDef.gridSize.cols;
+    } else {
+      this.rows = GameConfig.rows;
+      this.cols = GameConfig.cols;
+    }
   }
 
   // Check if a swap between two adjacent cells is valid (produces at least one match)
@@ -39,6 +61,15 @@ export class Match3Engine {
     if (!this.grid[r1][c1] || !this.grid[r2][c2]) return false;
     // Blockers cannot be swapped
     if (this.grid[r1][c1]!.isBlocker || this.grid[r2][c2]!.isBlocker) return false;
+
+    // Mechanics engine additional swap restrictions
+    if (!this.mechanics.canSwap(r1, c1) || !this.mechanics.canSwap(r2, c2)) return false;
+
+    // Check total swap budget
+    if (!this.mechanics.hasSwapsRemaining()) return false;
+
+    // Power-up combo is always valid (Issue #18)
+    if (this.mechanics.isPowerUpCombo(r1, c1, r2, c2)) return true;
 
     // Swap temporarily
     this.swap(r1, c1, r2, c2);
@@ -51,12 +82,46 @@ export class Match3Engine {
 
   // Execute a swap and resolve all resulting matches + cascades
   async executeSwap(r1: number, c1: number, r2: number, c2: number): Promise<SwapResult> {
+    const emptyResult: SwapResult = {
+      valid: false,
+      matches: [],
+      powerUpsCreated: [],
+      score: 0,
+      cascades: 0,
+      blockersDestroyed: 0,
+      mechanicEvents: [],
+    };
+
     if (!this.isValidSwap(r1, c1, r2, c2)) {
-      return { valid: false, matches: [], powerUpsCreated: [], score: 0, cascades: 0, blockersDestroyed: 0 };
+      this.mechanics.onInvalidSwap();
+      return emptyResult;
+    }
+
+    // Check for power-up combo (Issue #18)
+    const comboType = this.mechanics.isPowerUpCombo(r1, c1, r2, c2);
+    if (comboType) {
+      this.swap(r1, c1, r2, c2);
+      const comboResult = this.mechanics.executePowerUpCombo(comboType, r1, c1, r2, c2);
+      // Resolve cascades after combo
+      this.applyGravity();
+      this.fillEmptySpaces();
+      return {
+        valid: true,
+        matches: [],
+        powerUpsCreated: [],
+        score: comboResult.score,
+        cascades: 0,
+        blockersDestroyed: 0,
+        mechanicEvents: [{ type: 'powerUpCombo', data: { comboType, cleared: comboResult.cleared } }],
+      };
     }
 
     this.swap(r1, c1, r2, c2);
     events.emit('swap', { r1, c1, r2, c2 });
+
+    // Mechanics swap hook
+    const swapResult = this.mechanics.onSwap(r1, c1, r2, c2);
+    const allMechanicEvents = [...swapResult.events];
 
     let totalScore = 0;
     let cascadeLevel = 0;
@@ -67,15 +132,16 @@ export class Match3Engine {
     // Resolve cascades
     let matches = this.cascade.findMatches(this.grid);
     while (matches.length > 0) {
-      const multiplier = this.cascade.getMultiplier(cascadeLevel);
+      const multiplier = this.cascade.getMultiplier(cascadeLevel) * swapResult.bonusMultiplier;
 
       for (const match of matches) {
         // Score
-        const baseScore = match.cells.length >= 5
-          ? GameConfig.match5Score
-          : match.cells.length >= 4
-            ? GameConfig.match4Score
-            : GameConfig.match3Score;
+        const baseScore =
+          match.cells.length >= 5
+            ? GameConfig.match5Score
+            : match.cells.length >= 4
+              ? GameConfig.match4Score
+              : GameConfig.match3Score;
         totalScore += baseScore * multiplier;
 
         // Create power-ups for 4+ matches
@@ -91,8 +157,13 @@ export class Match3Engine {
       this.clearMatches(matches);
       events.emit('matchCleared', { matches, cascadeLevel });
 
+      // Mechanics match hook
+      const matchResult = this.mechanics.onMatchCleared(matches);
+      totalScore += matchResult.bonusScore;
+      allMechanicEvents.push(...matchResult.events);
+
       // Damage blockers adjacent to cleared cells
-      const allCells = matches.flatMap(m => m.cells);
+      const allCells = matches.flatMap((m) => m.cells);
       const blockerResult = this.damageAdjacentBlockers(allCells);
       for (const pos of blockerResult.destroyed) {
         this.grid[pos.row][pos.col] = null;
@@ -110,7 +181,7 @@ export class Match3Engine {
         }
       }
 
-      // Gravity: drop symbols down
+      // Gravity: drop symbols down (or up if gravity flipped)
       this.applyGravity();
       events.emit('gravityApplied');
 
@@ -118,11 +189,25 @@ export class Match3Engine {
       this.fillEmptySpaces();
       events.emit('gridFilled');
 
+      // Check for mega power-up (Issue #20)
+      const mega = this.mechanics.findMegaPowerUp();
+      if (mega) {
+        allMechanicEvents.push({ type: 'megaPowerUpReady', data: { cells: mega.cells } });
+      }
+
       cascadeLevel++;
       matches = this.cascade.findMatches(this.grid);
     }
 
-    return { valid: true, matches: allMatches, powerUpsCreated: allPowerUps, score: totalScore, cascades: cascadeLevel, blockersDestroyed: totalBlockersDestroyed };
+    return {
+      valid: true,
+      matches: allMatches,
+      powerUpsCreated: allPowerUps,
+      score: totalScore,
+      cascades: cascadeLevel,
+      blockersDestroyed: totalBlockersDestroyed,
+      mechanicEvents: allMechanicEvents,
+    };
   }
 
   // Activate a power-up at the given position
@@ -194,11 +279,15 @@ export class Match3Engine {
 
         const cell = this.grid[n.row]?.[n.col];
         if (cell?.isBlocker) {
+          // Thorns can't be broken by adjacent matches (only power-ups)
+          if (cell.blockerType === 'thorn') continue;
+
           processed.add(key);
           cell.blockerHealth--;
           if (cell.blockerHealth <= 0) {
             cell.isBlocker = false;
             cell.blockerHealth = 0;
+            cell.blockerType = null;
             destroyed.push({ row: n.row, col: n.col });
           } else {
             damaged.push({ row: n.row, col: n.col, newHealth: cell.blockerHealth });
@@ -226,15 +315,15 @@ export class Match3Engine {
     return null;
   }
 
-  private determinePowerUp(match: MatchGroup): { row: number; col: number; type: PowerUpType } | null {
+  determinePowerUp(match: MatchGroup): { row: number; col: number; type: PowerUpType } | null {
     if (match.cells.length >= 5) {
       const mid = match.cells[Math.floor(match.cells.length / 2)];
       return { row: mid.row, col: mid.col, type: 'rainbow' };
     }
     if (match.cells.length === 4) {
       // Check if it's a line or L-shape
-      const isHorizontal = match.cells.every(c => c.row === match.cells[0].row);
-      const isVertical = match.cells.every(c => c.col === match.cells[0].col);
+      const isHorizontal = match.cells.every((c) => c.row === match.cells[0].row);
+      const isVertical = match.cells.every((c) => c.col === match.cells[0].col);
       const mid = match.cells[Math.floor(match.cells.length / 2)];
       if (isHorizontal || isVertical) {
         return { row: mid.row, col: mid.col, type: 'blast' };
@@ -267,28 +356,75 @@ export class Match3Engine {
   private clearMatches(matches: MatchGroup[]): void {
     for (const match of matches) {
       for (const pos of match.cells) {
-        this.grid[pos.row][pos.col] = null;
+        const cell = this.grid[pos.row][pos.col];
+        if (cell?.isBlocker) {
+          // Ice/chain/frozen: matching breaks one layer of the blocker
+          cell.blockerHealth--;
+          if (cell.blockerHealth <= 0) {
+            cell.isBlocker = false;
+            cell.blockerHealth = 0;
+            cell.blockerType = null;
+            // Cell is freed — remove it as part of the match
+            this.grid[pos.row][pos.col] = null;
+          }
+          // If health > 0, ice cracked but cell stays (symbol preserved for next match)
+        } else {
+          this.grid[pos.row][pos.col] = null;
+        }
       }
     }
   }
 
   private applyGravity(): void {
+    const direction = this.mechanics.getGravityDirection();
+
     for (let c = 0; c < this.cols; c++) {
-      let writeRow = this.rows - 1;
-      for (let r = this.rows - 1; r >= 0; r--) {
-        const cell = this.grid[r][c];
-        if (cell?.isBlocker) {
-          // Blocker stays fixed — restart write pointer above it
-          writeRow = r - 1;
-          continue;
-        }
-        if (cell) {
-          if (r !== writeRow) {
-            this.grid[writeRow][c] = cell;
-            cell.row = writeRow;
-            this.grid[r][c] = null;
+      if (direction === 'down') {
+        let writeRow = this.rows - 1;
+        for (let r = this.rows - 1; r >= 0; r--) {
+          const cell = this.grid[r][c];
+          if (cell?.isBlocker || cell?.isDragonEgg || cell?.isChest) {
+            // Fixed objects stay in place — restart write pointer above
+            writeRow = r - 1;
+            continue;
           }
-          writeRow--;
+          if (cell?.isActive === false) {
+            writeRow = r - 1;
+            continue;
+          }
+          if (cell) {
+            if (r !== writeRow) {
+              this.grid[writeRow][c] = cell;
+              cell.row = writeRow;
+              this.grid[r][c] = null;
+
+              // Check transformer tile
+              this.mechanics.handleTransformer(writeRow, c);
+            }
+            writeRow--;
+          }
+        }
+      } else {
+        // Gravity up
+        let writeRow = 0;
+        for (let r = 0; r < this.rows; r++) {
+          const cell = this.grid[r][c];
+          if (cell?.isBlocker || cell?.isDragonEgg || cell?.isChest) {
+            writeRow = r + 1;
+            continue;
+          }
+          if (cell?.isActive === false) {
+            writeRow = r + 1;
+            continue;
+          }
+          if (cell) {
+            if (r !== writeRow) {
+              this.grid[writeRow][c] = cell;
+              cell.row = writeRow;
+              this.grid[r][c] = null;
+            }
+            writeRow++;
+          }
         }
       }
     }

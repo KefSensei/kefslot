@@ -30,6 +30,8 @@ async function boot() {
     height: GameConfig.height,
     backgroundColor: GameConfig.backgroundColor,
     antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
     resizeTo: window,
   });
 

@@ -467,6 +467,107 @@ const MODEL_REGISTRY = {
   },
 };
 
+// ─── Video Model Registry ───
+// Video models use the same /api/v1/jobs/createTask endpoint as market image models.
+const VIDEO_MODEL_REGISTRY = {
+  'veo-3/text-to-video': {
+    name: 'Veo 3 (Google)',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 5, max: 8, default: 8, description: 'Duration in seconds' },
+      negative_prompt: { type: 'string' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'sora/text-to-video': {
+    name: 'Sora (OpenAI)',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 5, max: 20, default: 5, description: 'Duration in seconds' },
+      resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'seedance/text-to-video': {
+    name: 'Seedance (ByteDance)',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 5, max: 10, default: 5 },
+      resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'seedance/image-to-video': {
+    name: 'Seedance I2V (ByteDance)',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 5, max: 10, default: 5 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, image_url: imageUrls?.[0], aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'wan/text-to-video': {
+    name: 'Wan 2.5',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 3, max: 10, default: 5 },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'hailuo/text-to-video': {
+    name: 'Hailuo 02 (MiniMax)',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 6, max: 10, default: 6 },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'kling/text-to-video': {
+    name: 'Kling 3.0',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', enum: [5, 10], default: 5 },
+      mode: { type: 'string', enum: ['standard', 'pro'], default: 'standard' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'kling/image-to-video': {
+    name: 'Kling 3.0 I2V',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', enum: [5, 10], default: 5 },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, image_url: imageUrls?.[0], aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+  'runway/text-to-video': {
+    name: 'Runway Aleph',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', min: 5, max: 10, default: 5 },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    },
+  },
+};
+
 // ─── Helpers ───
 
 const taskHistory = [];
@@ -623,6 +724,110 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'list_raw_assets',
       description: 'List all files in src/assets/raw/ waiting to be processed',
       inputSchema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'generate_video',
+      description: `Generate a video using kie.ai. Available models: veo-3/text-to-video (Google, best quality), sora/text-to-video (OpenAI), seedance/text-to-video, seedance/image-to-video, wan/text-to-video, hailuo/text-to-video, kling/text-to-video, kling/image-to-video, runway/text-to-video. Polls until done and downloads to src/assets/raw/.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'Video description prompt' },
+          model: {
+            type: 'string',
+            description: 'Model ID (e.g. "veo-3/text-to-video", "sora/text-to-video", "kling/image-to-video")',
+            default: 'veo-3/text-to-video',
+          },
+          aspect_ratio: {
+            type: 'string',
+            description: 'Aspect ratio: 16:9, 9:16, or 1:1',
+            default: '16:9',
+          },
+          image_urls: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Input image URLs for image-to-video models',
+          },
+          filename: {
+            type: 'string',
+            description: 'Output filename (saved to src/assets/raw/). Auto-generated if omitted.',
+          },
+          model_options: {
+            type: 'object',
+            description: 'Model-specific options (duration, resolution, mode, etc.)',
+          },
+        },
+        required: ['prompt'],
+      },
+    },
+    {
+      name: 'generate_music',
+      description: `Generate music using Suno V5 via kie.ai. Supports up to 8 minutes. Great for game music stems, ambient tracks, and jingles. Polls until done and downloads to src/assets/raw/.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'Music description (e.g. "upbeat Celtic fantasy adventure, flute and drums, heroic")',
+          },
+          model: {
+            type: 'string',
+            enum: ['V3_5', 'V4', 'V4_5', 'V4_5PLUS', 'V5'],
+            default: 'V5',
+            description: 'Suno model. V5 = best quality, fastest. Default: V5',
+          },
+          instrumental: {
+            type: 'boolean',
+            default: true,
+            description: 'No vocals when true (recommended for game music)',
+          },
+          style: {
+            type: 'string',
+            description: 'Style tags (e.g. "Celtic, orchestral, upbeat, fantasy, game music")',
+          },
+          title: { type: 'string', description: 'Track title (optional)' },
+          filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+        },
+        required: ['prompt'],
+      },
+    },
+    {
+      name: 'generate_sfx',
+      description: `Generate a sound effect using ElevenLabs via kie.ai. Great for game sounds: UI clicks, magic spells, item pickups, explosions. Downloads to src/assets/raw/.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Sound description (e.g. "magical sparkle chime, fairy-like, short 0.5s")',
+          },
+          duration_seconds: {
+            type: 'number',
+            description: 'Desired duration (0.5–22s). Leave unset for automatic.',
+          },
+          prompt_influence: {
+            type: 'number',
+            description: 'How closely to follow the prompt (0–1). Default: 0.3',
+          },
+          filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+        },
+        required: ['text'],
+      },
+    },
+    {
+      name: 'generate_tts',
+      description: `Generate speech from text using ElevenLabs via kie.ai. Use for character voice lines (e.g. Roxy). Downloads to src/assets/raw/.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'Text to synthesize into speech' },
+          voice_id: {
+            type: 'string',
+            description: 'ElevenLabs voice ID (optional, uses default voice if omitted)',
+          },
+          filename: { type: 'string', description: 'Output filename. Auto-generated if omitted.' },
+        },
+        required: ['text'],
+      },
     },
   ],
 }));
@@ -821,6 +1026,144 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } catch {
           return { content: [{ type: 'text', text: 'Raw directory is empty or missing.' }] };
         }
+      }
+
+      case 'generate_video': {
+        const { prompt, model: modelId = 'veo-3/text-to-video', aspect_ratio = '16:9', image_urls, filename, model_options = {} } = args;
+
+        const modelDef = VIDEO_MODEL_REGISTRY[modelId];
+        if (!modelDef) {
+          const available = Object.keys(VIDEO_MODEL_REGISTRY).join(', ');
+          return { content: [{ type: 'text', text: `Unknown video model "${modelId}". Available:\n${available}` }] };
+        }
+        if (modelDef.requiresImage && (!image_urls || image_urls.length === 0)) {
+          return { content: [{ type: 'text', text: `Model "${modelId}" requires image_urls.` }] };
+        }
+
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const safeModelName = modelId.replace(/\//g, '-');
+        const outFilename = filename || `${safeModelName}-${ts}.mp4`;
+        const outPath = join(RAW_DIR, outFilename);
+
+        const input = modelDef.buildInput(prompt, aspect_ratio, image_urls, model_options);
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: modelId, input });
+        const taskId = result.data?.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: 'Failed to create video task — no taskId returned' }] };
+
+        taskHistory.push({ taskId, model: modelId, prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+
+        const pollResult = await pollTask(taskId, 900000); // 15min max for video
+        const resultUrls = extractResultUrls(pollResult);
+        if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Task ${taskId} done but no result URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
+
+        await downloadToFile(resultUrls[0], outPath);
+        return {
+          content: [{
+            type: 'text',
+            text: [`✅ Video generated!`, `Model: ${modelDef.name}`, `Task ID: ${taskId}`, ``, `Downloaded to: ${outPath}`].join('\n'),
+          }],
+        };
+      }
+
+      case 'generate_music': {
+        const { prompt, model = 'V5', instrumental = true, style, title, filename } = args;
+
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = filename || `music-${ts}.mp3`;
+
+        const body = { prompt, model, customMode: false, instrumental };
+        if (style) body.style = style;
+        if (title) body.title = title;
+
+        const result = await kieRequest('POST', '/api/v1/generate', body);
+        const taskId = result.data?.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: 'Failed to start music generation — no taskId returned' }] };
+
+        taskHistory.push({ taskId, model: `suno-${model}`, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
+
+        // Poll using the Suno-specific endpoint
+        const maxWaitMs = 300000;
+        const start = Date.now();
+        let sunoData = null;
+        while (Date.now() - start < maxWaitMs) {
+          const poll = await kieRequest('GET', `/api/v1/generate/record-info?taskId=${taskId}`);
+          const d = poll.data || poll;
+          if (d.status === 'SUCCESS' || d.status === 'FIRST_SUCCESS') { sunoData = d.sunoData; break; }
+          if (d.status === 'CREATE_TASK_FAILED' || d.status === 'GENERATE_AUDIO_FAILED') throw new Error(`Music generation failed: ${d.errorMessage || d.status}`);
+          if (d.status === 'SENSITIVE_WORD_ERROR') throw new Error('Content filtered by Suno.');
+          await new Promise((r) => setTimeout(r, 4000));
+        }
+        if (!sunoData || sunoData.length === 0) return { content: [{ type: 'text', text: `Music task ${taskId} timed out.` }] };
+
+        const downloadedFiles = [];
+        for (let i = 0; i < sunoData.length; i++) {
+          const track = sunoData[i];
+          if (!track.audioUrl) continue;
+          const trackName = outFilename.replace(/\.mp3$/, i === 0 ? '.mp3' : `-${i + 1}.mp3`);
+          const trackPath = join(RAW_DIR, trackName);
+          await downloadToFile(track.audioUrl, trackPath);
+          downloadedFiles.push({ file: trackPath, title: track.title, duration: track.duration });
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: [
+              `✅ Music generated (Suno ${model})!`,
+              `Task ID: ${taskId}`,
+              `Tracks: ${downloadedFiles.length}`,
+              ...downloadedFiles.map((f) => `  → ${f.file}${f.title ? ` — "${f.title}"` : ''}${f.duration ? ` (${f.duration}s)` : ''}`),
+              ``,
+              `Use download_result or copy directly from src/assets/raw/`,
+            ].join('\n'),
+          }],
+        };
+      }
+
+      case 'generate_sfx': {
+        const { text, duration_seconds, prompt_influence, filename } = args;
+
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = filename || `sfx-${ts}.mp3`;
+        const outPath = join(RAW_DIR, outFilename);
+
+        const input = { text, output_format: 'mp3_44100_128' };
+        // API minimum is 0.5s — clamp silently
+        if (duration_seconds !== undefined) input.duration_seconds = Math.max(0.5, duration_seconds);
+        if (prompt_influence !== undefined) input.prompt_influence = prompt_influence;
+
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/sound-effect-v2', input });
+        const taskId = result.data?.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: 'Failed to start SFX generation' }] };
+
+        const pollResult = await pollTask(taskId, 60000);
+        const urls = extractResultUrls(pollResult);
+        if (urls.length === 0) return { content: [{ type: 'text', text: `SFX task ${taskId} done but no URLs found.` }] };
+
+        await downloadToFile(urls[0], outPath);
+        return { content: [{ type: 'text', text: `✅ SFX generated!\nText: "${text}"\nDownloaded to: ${outPath}` }] };
+      }
+
+      case 'generate_tts': {
+        const { text, voice_id, filename } = args;
+
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const outFilename = filename || `tts-${ts}.mp3`;
+        const outPath = join(RAW_DIR, outFilename);
+
+        const input = { text, output_format: 'mp3_44100_128' };
+        if (voice_id) input.voice_id = voice_id;
+
+        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/text-to-speech-turbo-2-5', input });
+        const taskId = result.data?.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: 'Failed to start TTS generation' }] };
+
+        const pollResult = await pollTask(taskId, 60000);
+        const urls = extractResultUrls(pollResult);
+        if (urls.length === 0) return { content: [{ type: 'text', text: `TTS task ${taskId} done but no URLs found.` }] };
+
+        await downloadToFile(urls[0], outPath);
+        return { content: [{ type: 'text', text: `✅ TTS generated!\nText: "${text.slice(0, 80)}"\nDownloaded to: ${outPath}` }] };
       }
 
       default:

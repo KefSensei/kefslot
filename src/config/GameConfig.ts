@@ -14,13 +14,13 @@ const StaticConfig = {
   cols: 5,
   rows: 5,
   cellSize: 80, // default (landscape), overridden at runtime per orientation
-  cellSizeLandscape: 66,
-  cellSizePortrait: 60,
+  cellSizeLandscape: 94,
+  cellSizePortrait: 70,
   gridPadding: 20,
 
   // Grid center positions (relative to active canvas) — tuned to slot cabinet art
-  gridCenterLandscape: { x: 405, y: 280 } as { x: number; y: number },
-  gridCenterPortrait: { x: 250, y: 377 } as { x: number; y: number },
+  gridCenterLandscape: { x: 398, y: 370 } as { x: number; y: number },
+  gridCenterPortrait: { x: 249, y: 375 } as { x: number; y: number },
 
   // Timing (ms)
   spinDuration: 1500,
@@ -47,10 +47,12 @@ const StaticConfig = {
 } as const;
 
 // Mutable runtime layout state
-export const GameConfig: Omit<typeof StaticConfig, 'cellSize'> & {
+export const GameConfig: Omit<typeof StaticConfig, 'cellSize' | 'rows' | 'cols'> & {
   activeWidth: number;
   activeHeight: number;
   cellSize: number;
+  rows: number;
+  cols: number;
   isPortrait: boolean;
   isTouch: boolean;
 } = {

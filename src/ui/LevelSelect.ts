@@ -3,8 +3,22 @@ import { GameConfig } from '@/config/GameConfig';
 import { LevelConfigs } from '@/config/LevelConfig';
 import { PlayerState } from '@/models/PlayerState';
 
+/** World definitions — 10 worlds × 10 levels each */
+const WORLDS = [
+  { id: 1, name: 'Enchanted Meadow', levels: [1, 10], color: 0x2ecc71 },
+  { id: 2, name: 'Crystal Caverns', levels: [11, 20], color: 0x3498db },
+  { id: 3, name: 'Volcanic Forge', levels: [21, 30], color: 0xff6348 },
+  { id: 4, name: 'Sunken Ruins', levels: [31, 40], color: 0x0984e3 },
+  { id: 5, name: 'Skyward Spire', levels: [41, 50], color: 0x74b9ff },
+  { id: 6, name: 'Shadow Forest', levels: [51, 60], color: 0xa55eea },
+  { id: 7, name: 'Frozen Wastes', levels: [61, 70], color: 0x48dbfb },
+  { id: 8, name: "Dragon's Lair", levels: [71, 80], color: 0xff4757 },
+  { id: 9, name: 'Astral Realm', levels: [81, 90], color: 0x7d5fff },
+  { id: 10, name: "Roxy's Tower", levels: [91, 100], color: 0xf9ca24 },
+];
+
 /** Perpendicular offset (normalized) from road center to node edge */
-const ROAD_OFFSET = 0.045;
+const ROAD_OFFSET = 0.02;
 
 /**
  * Given a list of road-center waypoints, offset odd levels left and even
@@ -32,18 +46,19 @@ function offsetFromRoad(centers: [number, number][]): [number, number][] {
 }
 
 // Road centerline traced from the portrait world-map art (500×900 canvas).
+// Path follows the stone road: bottom-center → bridge → waterfall → golden summit.
 const ROAD_CENTER_PORTRAIT: [number, number][] = [
-  [0.26, 0.19], // L1
-  [0.47, 0.28], // L2
-  [0.61, 0.27], // L3
-  [0.54, 0.32], // L4
-  [0.71, 0.34], // L5
-  [0.61, 0.39], // L6
-  [0.43, 0.37], // L7
-  [0.29, 0.4], // L8
-  [0.43, 0.43], // L9
-  [0.28, 0.48], // L10
-  [0.46, 0.49], // L11
+  [0.5, 0.91], // L1  — bottom centre, path start
+  [0.58, 0.8], // L2  — first curve right past daisies
+  [0.62, 0.7], // L3  — right side mushroom cluster
+  [0.5, 0.62], // L4  — approaching the stone bridge
+  [0.38, 0.55], // L5  — bridge crossing, left bank
+  [0.42, 0.46], // L6  — past bridge, heading upward
+  [0.55, 0.38], // L7  — right of waterfall
+  [0.52, 0.29], // L8  — through the mist, upper path
+  [0.44, 0.2], // L9  — entering forest canopy
+  [0.5, 0.1], // L10 — BOSS: golden summit glow
+  [0.46, 0.49], // L11 (World 2 — unused for W1)
   [0.64, 0.51], // L12
   [0.54, 0.55], // L13
   [0.47, 0.61], // L14
@@ -55,21 +70,20 @@ const ROAD_CENTER_PORTRAIT: [number, number][] = [
   [0.31, 0.91], // L20
 ];
 
-const PATH_PORTRAIT = offsetFromRoad(ROAD_CENTER_PORTRAIT);
-
-// Road centerline for landscape (800×700 canvas) — tapped via debug overlay.
+// Road centerline for landscape (800×700 canvas).
+// Path follows the stone road: bottom-right stepping stones → bridge → forest → golden summit.
 const ROAD_CENTER_LANDSCAPE: [number, number][] = [
-  [0.42, 0.07], // L1
-  [0.55, 0.05], // L2
-  [0.56, 0.13], // L3
-  [0.67, 0.21], // L4
-  [0.55, 0.27], // L5
-  [0.43, 0.23], // L6
-  [0.44, 0.34], // L7
-  [0.32, 0.3], // L8
-  [0.32, 0.39], // L9
-  [0.36, 0.47], // L10
-  [0.45, 0.48], // L11
+  [0.74, 0.88], // L1  — bottom-right stepping stones
+  [0.6, 0.8], // L2  — first curve left, big mushroom area
+  [0.46, 0.74], // L3  — lower mushrooms & wildflowers
+  [0.34, 0.63], // L4  — approaching the stone bridge
+  [0.42, 0.53], // L5  — bridge, centre crossing
+  [0.54, 0.44], // L6  — past bridge, curving right
+  [0.64, 0.34], // L7  — upper-right, through tall trees
+  [0.54, 0.24], // L8  — curving back left, lantern trees
+  [0.4, 0.16], // L9  — upper-left, into forest glow
+  [0.52, 0.07], // L10 — BOSS: golden summit
+  [0.45, 0.48], // L11 (World 2 — unused for W1)
   [0.56, 0.48], // L12
   [0.64, 0.55], // L13
   [0.57, 0.6], // L14
@@ -81,17 +95,19 @@ const ROAD_CENTER_LANDSCAPE: [number, number][] = [
   [0.58, 0.96], // L20
 ];
 
-const PATH_LANDSCAPE = offsetFromRoad(ROAD_CENTER_LANDSCAPE);
-
 /** Check URL for ?debug=1 to enable WYSIWYG coordinate editor */
 const DEBUG_MODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
 
 export class LevelSelect extends Container {
   onLevelChosen: ((levelId: number) => void) | null = null;
   private bgTextures: { landscape: Texture; portrait: Texture } | null = null;
+  private worldMapTextures: { landscape: Texture; portrait: Texture }[] = [];
+  private currentWorld = 0; // index into WORLDS array
 
   constructor(private player: PlayerState) {
     super();
+    // Start on the highest unlocked world
+    this.currentWorld = this.getHighestUnlockedWorld();
     this.build();
   }
 
@@ -101,9 +117,23 @@ export class LevelSelect extends Container {
     this.build();
   }
 
-  refresh(): void {
+  setWorldMapTextures(textures: { landscape: Texture; portrait: Texture }[]): void {
+    this.worldMapTextures = textures;
     this.removeChildren();
     this.build();
+  }
+
+  refresh(): void {
+    this.removeChildren();
+    this.currentWorld = this.getHighestUnlockedWorld();
+    this.build();
+  }
+
+  private getHighestUnlockedWorld(): number {
+    for (let w = WORLDS.length - 1; w >= 0; w--) {
+      if (this.player.isLevelUnlocked(WORLDS[w].levels[0])) return w;
+    }
+    return 0;
   }
 
   private build(): void {
@@ -111,9 +141,20 @@ export class LevelSelect extends Container {
     const h = GameConfig.activeHeight;
     const isPortrait = GameConfig.isPortrait;
 
-    // Background
-    if (this.bgTextures) {
-      const bg = new Sprite(isPortrait ? this.bgTextures.portrait : this.bgTextures.landscape);
+    // Background — use per-world texture if available, else fallback
+    const worldTex = this.worldMapTextures[this.currentWorld];
+    const bgTex = worldTex
+      ? isPortrait
+        ? worldTex.portrait
+        : worldTex.landscape
+      : this.bgTextures
+        ? isPortrait
+          ? this.bgTextures.portrait
+          : this.bgTextures.landscape
+        : null;
+
+    if (bgTex) {
+      const bg = new Sprite(bgTex);
       bg.width = w;
       bg.height = h;
       this.addChild(bg);
@@ -141,47 +182,50 @@ export class LevelSelect extends Container {
   // ─── Normal (non-debug) map ───────────────────────────────────────
 
   private buildNormalMap(w: number, h: number, isPortrait: boolean): void {
-    const path = isPortrait ? PATH_PORTRAIT : PATH_LANDSCAPE;
+    const world = WORLDS[this.currentWorld];
+    const worldColor = world.color;
+
+    // For worlds 1-2 we have path coordinates; for worlds 3+ generate a grid layout
+    const firstLevelId = world.levels[0];
+    const lastLevelId = world.levels[1];
+    const worldLevels = LevelConfigs.filter((l) => l.id >= firstLevelId && l.id <= lastLevelId);
+
+    // Use hand-tuned path for world 1, generate zigzag for all others
+    let path: [number, number][];
+    if (this.currentWorld === 0) {
+      const raw = isPortrait ? ROAD_CENTER_PORTRAIT : ROAD_CENTER_LANDSCAPE;
+      path = offsetFromRoad(raw);
+    } else {
+      path = this.generateWorldPath(worldLevels.length, isPortrait);
+    }
 
     this.drawPathLine(path, w, h);
 
-    // World labels
-    const worldLabelPos: { name: string; x: number; y: number }[] = isPortrait
-      ? [
-          { name: 'Enchanted Meadow', x: 0.5, y: 0.04 },
-          { name: 'Crystal Caverns', x: 0.72, y: 0.47 },
-        ]
-      : [
-          { name: 'Enchanted Meadow', x: 0.5, y: 0.0 },
-          { name: 'Crystal Caverns', x: 0.18, y: 0.28 },
-        ];
-
-    for (const lbl of worldLabelPos) {
-      const label = new Text({
-        text: lbl.name,
-        style: new TextStyle({
-          fontSize: isPortrait ? 16 : 18,
-          fill: 0xf5d060,
-          fontWeight: 'bold',
-          fontFamily: 'Segoe UI, sans-serif',
-          letterSpacing: 2,
-          dropShadow: { color: 0x000000, distance: 2, alpha: 0.9 },
-        }),
-      });
-      label.anchor.set(0.5, 0);
-      label.x = lbl.x * w;
-      label.y = lbl.y * h;
-      this.addChild(label);
-    }
+    // World title
+    const titleLabel = new Text({
+      text: `World ${world.id}: ${world.name}`,
+      style: new TextStyle({
+        fontSize: isPortrait ? 18 : 22,
+        fill: worldColor,
+        fontWeight: 'bold',
+        fontFamily: 'Segoe UI, sans-serif',
+        letterSpacing: 2,
+        dropShadow: { color: 0x000000, distance: 2, alpha: 0.9 },
+      }),
+    });
+    titleLabel.anchor.set(0.5, 0);
+    titleLabel.x = w / 2;
+    titleLabel.y = isPortrait ? h * 0.02 : h * 0.01;
+    this.addChild(titleLabel);
 
     // Level nodes
     const nodeSize = isPortrait ? 40 : 44;
     const bossSize = isPortrait ? 50 : 54;
 
-    for (let i = 0; i < LevelConfigs.length && i < path.length; i++) {
-      const level = LevelConfigs[i];
+    for (let i = 0; i < worldLevels.length && i < path.length; i++) {
+      const level = worldLevels[i];
       const [nx, ny] = path[i];
-      const isBoss = level.id === 10 || level.id === 20;
+      const isBoss = (i + 1) % 10 === 0; // Last level of each world is boss
       const size = isBoss ? bossSize : nodeSize;
       const unlocked = this.player.isLevelUnlocked(level.id);
       const stars = this.player.getStars(level.id);
@@ -194,40 +238,60 @@ export class LevelSelect extends Container {
       const radius = size / 2;
 
       if (unlocked) {
-        circle.circle(0, 0, radius + 4);
-        circle.fill({ color: stars > 0 ? 0x9b59b6 : 0x5b3a8a, alpha: 0.4 });
+        // Outer glow ring
+        circle.circle(0, 0, radius + 7);
+        circle.fill({ color: isBoss ? 0xf1c40f : worldColor, alpha: 0.18 });
+        // Mid ring
+        circle.circle(0, 0, radius + 3);
+        circle.fill({ color: isBoss ? 0xf1c40f : worldColor, alpha: 0.3 });
+        // Main fill
         circle.circle(0, 0, radius);
-        circle.fill({ color: stars > 0 ? 0x2d1b69 : 0x1e0a3a, alpha: 0.92 });
-        circle.stroke({ color: isBoss ? 0xf1c40f : 0x9b59b6, width: isBoss ? 3 : 2 });
+        circle.fill({ color: stars > 0 ? 0x1a0a40 : 0x0d0520, alpha: 0.92 });
+        // Border
+        circle.circle(0, 0, radius);
+        circle.stroke({ color: isBoss ? 0xf1c40f : worldColor, width: isBoss ? 3.5 : 2.5, alpha: 1 });
       } else {
+        // Locked — faded dark with subtle border
+        circle.circle(0, 0, radius + 2);
+        circle.fill({ color: 0x000000, alpha: 0.25 });
         circle.circle(0, 0, radius);
-        circle.fill({ color: 0x111111, alpha: 0.7 });
-        circle.stroke({ color: 0x333333, width: 1.5 });
+        circle.fill({ color: 0x111111, alpha: 0.75 });
+        circle.stroke({ color: 0x444444, width: 1.5 });
       }
       btn.addChild(circle);
 
-      const numText = new Text({
-        text: String(level.id),
-        style: new TextStyle({
-          fontSize: isBoss ? 22 : 18,
-          fill: unlocked ? 0xffffff : 0x555555,
-          fontWeight: 'bold',
-          fontFamily: 'Segoe UI, sans-serif',
-          dropShadow: unlocked ? { color: 0x000000, distance: 1, alpha: 0.5 } : undefined,
-        }),
-      });
-      numText.anchor.set(0.5);
-      numText.y = stars > 0 ? -4 : 0;
-      btn.addChild(numText);
-
-      if (stars > 0) {
-        const starsText = new Text({
-          text: '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars),
-          style: new TextStyle({ fontSize: 10, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+      if (unlocked) {
+        const numText = new Text({
+          text: String(level.id),
+          style: new TextStyle({
+            fontSize: isBoss ? 22 : 17,
+            fill: isBoss ? 0xf1c40f : 0xffffff,
+            fontWeight: 'bold',
+            fontFamily: 'Segoe UI, sans-serif',
+            dropShadow: { color: 0x000000, distance: 2, alpha: 0.8 },
+          }),
         });
-        starsText.anchor.set(0.5);
-        starsText.y = 10;
-        btn.addChild(starsText);
+        numText.anchor.set(0.5);
+        numText.y = stars > 0 ? -5 : 0;
+        btn.addChild(numText);
+
+        if (stars > 0) {
+          const starsText = new Text({
+            text: '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars),
+            style: new TextStyle({ fontSize: 11, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+          });
+          starsText.anchor.set(0.5);
+          starsText.y = 9;
+          btn.addChild(starsText);
+        }
+      } else {
+        // Lock icon for locked levels
+        const lockG = new Graphics();
+        lockG.roundRect(-5, -2, 10, 8, 2);
+        lockG.fill({ color: 0x444444, alpha: 0.9 });
+        lockG.arc(0, -2, 4, Math.PI, 0);
+        lockG.stroke({ color: 0x555555, width: 1.5 });
+        btn.addChild(lockG);
       }
 
       if (unlocked) {
@@ -240,6 +304,143 @@ export class LevelSelect extends Container {
 
       this.addChild(btn);
     }
+
+    // World navigation arrows
+    this.buildWorldNav(w, h, isPortrait);
+  }
+
+  /** Build prev/next world navigation buttons */
+  private buildWorldNav(w: number, h: number, isPortrait: boolean): void {
+    const btnSize = isPortrait ? 36 : 40;
+    const y = isPortrait ? h * 0.95 : h * 0.96;
+
+    // Previous world
+    if (this.currentWorld > 0) {
+      const prevBtn = new Container();
+      prevBtn.x = w * 0.15;
+      prevBtn.y = y;
+      const bg = new Graphics();
+      bg.roundRect(-btnSize / 2, -btnSize / 2, btnSize, btnSize, 8);
+      bg.fill({ color: 0x2d1b69, alpha: 0.85 });
+      bg.stroke({ color: 0x9b59b6, width: 2 });
+      prevBtn.addChild(bg);
+      // Arrow left
+      const arrow = new Graphics();
+      arrow.moveTo(6, 0);
+      arrow.lineTo(-6, 0);
+      arrow.moveTo(-3, -5);
+      arrow.lineTo(-8, 0);
+      arrow.lineTo(-3, 5);
+      arrow.stroke({ color: 0xffffff, width: 2.5 });
+      prevBtn.addChild(arrow);
+      prevBtn.eventMode = 'static';
+      prevBtn.cursor = 'pointer';
+      prevBtn.on('pointerdown', () => {
+        this.currentWorld--;
+        this.removeChildren();
+        this.build();
+      });
+      this.addChild(prevBtn);
+
+      // Previous world name
+      const prevName = new Text({
+        text: WORLDS[this.currentWorld - 1].name,
+        style: new TextStyle({
+          fontSize: 11,
+          fill: 0xb0a0c0,
+          fontFamily: 'Segoe UI, sans-serif',
+        }),
+      });
+      prevName.anchor.set(0.5);
+      prevName.x = prevBtn.x;
+      prevName.y = y - btnSize / 2 - 8;
+      this.addChild(prevName);
+    }
+
+    // Next world (only if first level is unlocked or any level in that world is)
+    if (this.currentWorld < WORLDS.length - 1) {
+      const nextWorldFirst = WORLDS[this.currentWorld + 1].levels[0];
+      const nextUnlocked = this.player.isLevelUnlocked(nextWorldFirst);
+
+      const nextBtn = new Container();
+      nextBtn.x = w * 0.85;
+      nextBtn.y = y;
+      const bg = new Graphics();
+      bg.roundRect(-btnSize / 2, -btnSize / 2, btnSize, btnSize, 8);
+      bg.fill({ color: nextUnlocked ? 0x2d1b69 : 0x111111, alpha: 0.85 });
+      bg.stroke({ color: nextUnlocked ? 0x9b59b6 : 0x333333, width: 2 });
+      nextBtn.addChild(bg);
+      // Arrow right
+      const arrow = new Graphics();
+      arrow.moveTo(-6, 0);
+      arrow.lineTo(6, 0);
+      arrow.moveTo(3, -5);
+      arrow.lineTo(8, 0);
+      arrow.lineTo(3, 5);
+      arrow.stroke({ color: nextUnlocked ? 0xffffff : 0x555555, width: 2.5 });
+      nextBtn.addChild(arrow);
+
+      if (nextUnlocked) {
+        nextBtn.eventMode = 'static';
+        nextBtn.cursor = 'pointer';
+        nextBtn.on('pointerdown', () => {
+          this.currentWorld++;
+          this.removeChildren();
+          this.build();
+        });
+      }
+      this.addChild(nextBtn);
+
+      // Next world name
+      const nextName = new Text({
+        text: WORLDS[this.currentWorld + 1].name,
+        style: new TextStyle({
+          fontSize: 11,
+          fill: nextUnlocked ? 0xb0a0c0 : 0x555555,
+          fontFamily: 'Segoe UI, sans-serif',
+        }),
+      });
+      nextName.anchor.set(0.5);
+      nextName.x = nextBtn.x;
+      nextName.y = y - btnSize / 2 - 8;
+      this.addChild(nextName);
+    }
+
+    // World indicator dots
+    const dotY = y + (isPortrait ? 0 : -4);
+    const totalDotsW = WORLDS.length * 14;
+    const dotStartX = (w - totalDotsW) / 2;
+    for (let i = 0; i < WORLDS.length; i++) {
+      const dot = new Graphics();
+      const isCurrent = i === this.currentWorld;
+      const isUnlocked = this.player.isLevelUnlocked(WORLDS[i].levels[0]);
+      dot.circle(dotStartX + i * 14 + 4, dotY, isCurrent ? 5 : 3);
+      dot.fill({ color: isCurrent ? WORLDS[i].color : isUnlocked ? 0x888888 : 0x333333, alpha: isCurrent ? 1 : 0.6 });
+      this.addChild(dot);
+    }
+  }
+
+  /**
+   * Generate a zigzag path for worlds that don't have hand-tuned coordinates.
+   * Pattern: left, right, left, right... descending vertically.
+   * Uses deterministic offsets (seeded from level index) for subtle variation.
+   */
+  private generateWorldPath(count: number, isPortrait: boolean): [number, number][] {
+    const path: [number, number][] = [];
+    const xLeft = isPortrait ? 0.28 : 0.3;
+    const xRight = isPortrait ? 0.72 : 0.7;
+    const yStart = isPortrait ? 0.08 : 0.08;
+    const yEnd = isPortrait ? 0.86 : 0.86;
+
+    for (let i = 0; i < count; i++) {
+      const isLeft = i % 2 === 0;
+      // Small deterministic x wobble so it doesn't look perfectly aligned
+      const wobble = ((i * 7 + 3) % 11) / 110 - 0.05; // range ~[-0.05, +0.05]
+      const x = (isLeft ? xLeft : xRight) + wobble;
+      const y = yStart + (i / Math.max(count - 1, 1)) * (yEnd - yStart);
+      path.push([x, y]);
+    }
+    return path;
   }
 
   // ─── WYSIWYG Debug Editor ─────────────────────────────────────────
@@ -445,28 +646,44 @@ export class LevelSelect extends Container {
   private drawPathLine(path: [number, number][], w: number, h: number): void {
     if (path.length < 2) return;
 
-    const line = new Graphics();
     const points = path.map(([nx, ny]) => ({ x: nx * w, y: ny * h }));
 
+    // Shadow layer — thick soft glow under the path
+    const shadow = new Graphics();
+    for (let i = 0; i < points.length - 1; i++) {
+      const from = points[i];
+      const to = points[i + 1];
+      shadow.moveTo(from.x, from.y);
+      shadow.lineTo(to.x, to.y);
+    }
+    shadow.stroke({ color: 0x000000, width: 8, alpha: 0.25 });
+    this.addChild(shadow);
+
+    // Main solid path line
+    const solid = new Graphics();
+    for (let i = 0; i < points.length - 1; i++) {
+      solid.moveTo(points[i].x, points[i].y);
+      solid.lineTo(points[i + 1].x, points[i + 1].y);
+    }
+    solid.stroke({ color: 0x8b6914, width: 4, alpha: 0.5 });
+    this.addChild(solid);
+
+    // Bright dotted highlight on top
+    const dots = new Graphics();
     for (let i = 0; i < points.length - 1; i++) {
       const from = points[i];
       const to = points[i + 1];
       const dx = to.x - from.x;
       const dy = to.y - from.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const dashLen = 6;
-      const gapLen = 6;
-      const steps = Math.floor(dist / (dashLen + gapLen));
-
-      for (let s = 0; s < steps; s++) {
-        const t0 = (s * (dashLen + gapLen)) / dist;
-        const t1 = Math.min((s * (dashLen + gapLen) + dashLen) / dist, 1);
-        line.moveTo(from.x + dx * t0, from.y + dy * t0);
-        line.lineTo(from.x + dx * t1, from.y + dy * t1);
+      const step = 10;
+      const count = Math.floor(dist / step);
+      for (let s = 0; s <= count; s++) {
+        const t = s / count;
+        dots.circle(from.x + dx * t, from.y + dy * t, 2.5);
       }
     }
-
-    line.stroke({ color: 0xf5d060, width: 2, alpha: 0.5 });
-    this.addChild(line);
+    dots.fill({ color: 0xf5d060, alpha: 0.8 });
+    this.addChild(dots);
   }
 }

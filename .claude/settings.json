@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"Dev server running on http://localhost:3007 (started via Bash — preview_start EPERM is a known macOS TCC issue, grant Full Disk Access to Claude to fix)\"}'",
+            "async": true
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
