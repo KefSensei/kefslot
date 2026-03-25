@@ -465,6 +465,19 @@ const MODEL_REGISTRY = {
       return { image: imageUrls?.[0] };
     },
   },
+
+  // Topaz (utility)
+  'topaz/image-upscale': {
+    name: 'Topaz Image Upscale',
+    type: 'market',
+    requiresImage: true,
+    options: {
+      upscale_factor: { type: 'string', enum: ['1', '2', '4', '8'], default: '2' },
+    },
+    buildInput(_prompt, _ar, imageUrls, opts) {
+      return { image_url: imageUrls?.[0], upscale_factor: opts.upscale_factor || '2' };
+    },
+  },
 };
 
 // ─── Video Model Registry ───
@@ -515,12 +528,16 @@ const VIDEO_MODEL_REGISTRY = {
       duration: { type: 'number', enum: [5, 10], default: 5, description: 'Duration in seconds' },
       quality: { type: 'string', enum: ['720p', '1080p'], default: '720p' },
     },
-    buildBody(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspectRatio, duration: opts.duration || 5, quality: opts.quality || '720p' };
+    buildBody(prompt, aspectRatio, imageUrls, opts) {
+      const body = { prompt, aspectRatio, duration: opts.duration || 5, quality: opts.quality || '720p' };
+      if (imageUrls?.length) body.imageUrl = imageUrls[0];
+      return body;
     },
   },
 
   // ── Market models (createTask endpoint) ──
+
+  // ── Sora 2 (OpenAI) ──
   'sora/text-to-video': {
     name: 'Sora 2 (OpenAI)',
     type: 'market',
@@ -532,7 +549,6 @@ const VIDEO_MODEL_REGISTRY = {
       upload_method: { type: 'string', default: 's3' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      // Sora uses 'landscape'/'portrait'/'square' instead of ratios
       let ar = aspectRatio;
       if (ar === '16:9') ar = 'landscape';
       else if (ar === '9:16') ar = 'portrait';
@@ -540,6 +556,103 @@ const VIDEO_MODEL_REGISTRY = {
       return { prompt, aspect_ratio: ar, n_frames: opts.n_frames || '10', remove_watermark: opts.remove_watermark !== false, upload_method: opts.upload_method || 's3' };
     },
   },
+  'sora/image-to-video': {
+    name: 'Sora 2 I2V (OpenAI)',
+    type: 'market',
+    apiModel: 'sora-2-image-to-video',
+    requiresImage: true,
+    aspectRatios: ['landscape', 'portrait', 'square'],
+    options: {
+      n_frames: { type: 'string', enum: ['10', '20'], default: '10' },
+      remove_watermark: { type: 'boolean', default: true },
+      upload_method: { type: 'string', default: 's3' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      let ar = aspectRatio;
+      if (ar === '16:9') ar = 'landscape';
+      else if (ar === '9:16') ar = 'portrait';
+      else if (ar === '1:1') ar = 'square';
+      return { prompt, image_urls: imageUrls, aspect_ratio: ar, n_frames: opts.n_frames || '10', remove_watermark: opts.remove_watermark !== false, upload_method: opts.upload_method || 's3' };
+    },
+  },
+  'sora-pro/text-to-video': {
+    name: 'Sora 2 Pro (OpenAI)',
+    type: 'market',
+    apiModel: 'sora-2-pro-text-to-video',
+    aspectRatios: ['landscape', 'portrait', 'square'],
+    options: {
+      n_frames: { type: 'string', enum: ['10', '20'], default: '10' },
+      size: { type: 'string', enum: ['high'], default: 'high', description: 'Output resolution' },
+      remove_watermark: { type: 'boolean', default: true },
+      upload_method: { type: 'string', default: 's3' },
+    },
+    buildInput(prompt, aspectRatio, _imgs, opts) {
+      let ar = aspectRatio;
+      if (ar === '16:9') ar = 'landscape';
+      else if (ar === '9:16') ar = 'portrait';
+      else if (ar === '1:1') ar = 'square';
+      return { prompt, aspect_ratio: ar, n_frames: opts.n_frames || '10', size: opts.size || 'high', remove_watermark: opts.remove_watermark !== false, upload_method: opts.upload_method || 's3' };
+    },
+  },
+  'sora-pro/image-to-video': {
+    name: 'Sora 2 Pro I2V (OpenAI)',
+    type: 'market',
+    apiModel: 'sora-2-pro-image-to-video',
+    requiresImage: true,
+    aspectRatios: ['landscape', 'portrait', 'square'],
+    options: {
+      remove_watermark: { type: 'boolean', default: true },
+      upload_method: { type: 'string', default: 's3' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      let ar = aspectRatio;
+      if (ar === '16:9') ar = 'landscape';
+      else if (ar === '9:16') ar = 'portrait';
+      else if (ar === '1:1') ar = 'square';
+      return { prompt, image_urls: imageUrls, aspect_ratio: ar, remove_watermark: opts.remove_watermark !== false, upload_method: opts.upload_method || 's3' };
+    },
+  },
+  'sora/characters': {
+    name: 'Sora 2 Characters (OpenAI)',
+    type: 'market',
+    apiModel: 'sora-2-characters',
+    options: {
+      timestamps: { type: 'string', description: 'Comma-separated timestamps (e.g. "3.55,5.55")' },
+      character_user_name: { type: 'string', description: 'Character user name' },
+      character_prompt: { type: 'string', description: 'Character description prompt' },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      return { ...opts };
+    },
+  },
+  'sora/characters-pro': {
+    name: 'Sora 2 Characters Pro (OpenAI)',
+    type: 'market',
+    apiModel: 'sora-2-characters-pro',
+    options: {
+      origin_task_id: { type: 'string', description: 'Task ID of original video' },
+      timestamps: { type: 'string', description: 'Comma-separated timestamps' },
+      character_user_name: { type: 'string', description: 'Character user name' },
+      character_prompt: { type: 'string', description: 'Character description prompt' },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      return { ...opts };
+    },
+  },
+  'sora/watermark-remover': {
+    name: 'Sora 2 Watermark Remover',
+    type: 'market',
+    apiModel: 'sora-watermark-remover',
+    options: {
+      video_url: { type: 'string', description: 'Sora 2 video URL to remove watermark from' },
+      upload_method: { type: 'string', enum: ['s3', 'oss'], default: 's3' },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      return { video_url: opts.video_url, upload_method: opts.upload_method || 's3' };
+    },
+  },
+
+  // ── Seedance (ByteDance) ──
   'seedance/text-to-video': {
     name: 'Seedance 1.5 Pro (ByteDance)',
     type: 'market',
@@ -568,20 +681,108 @@ const VIDEO_MODEL_REGISTRY = {
       return { prompt, input_urls: imageUrls, aspect_ratio: aspectRatio, duration: String(opts.duration || 8), resolution: opts.resolution || '720p' };
     },
   },
+
+  // ── Wan ──
   'wan/text-to-video': {
-    name: 'Wan 2.6',
+    name: 'Wan 2.6 T2V',
     type: 'market',
     apiModel: 'wan/2-6-text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 3, max: 10, default: 5 },
+      duration: { type: 'string', enum: ['5', '10', '15'], default: '5' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+      return { prompt, aspect_ratio: aspectRatio, duration: opts.duration || '5', resolution: opts.resolution || '1080p' };
     },
   },
+  'wan/image-to-video': {
+    name: 'Wan 2.6 I2V',
+    type: 'market',
+    apiModel: 'wan/2-6-image-to-video',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'string', enum: ['5', '10', '15'], default: '5' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, image_urls: imageUrls, duration: opts.duration || '5', resolution: opts.resolution || '1080p' };
+    },
+  },
+  'wan/flash-image-to-video': {
+    name: 'Wan 2.6 Flash I2V',
+    type: 'market',
+    apiModel: 'wan/2-6-flash-image-to-video',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'string', enum: ['5', '10', '15'], default: '5' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
+      audio: { type: 'boolean', default: false },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      return { prompt, image_urls: imageUrls, duration: opts.duration || '5', resolution: opts.resolution || '1080p', audio: opts.audio || false };
+    },
+  },
+  'wan/video-to-video': {
+    name: 'Wan 2.6 V2V',
+    type: 'market',
+    apiModel: 'wan/2-6-video-to-video',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      video_urls: { type: 'array', description: 'Input video URL(s)' },
+      duration: { type: 'string', enum: ['5', '10', '15'], default: '5' },
+      resolution: { type: 'string', enum: ['720p', '1080p'], default: '1080p' },
+    },
+    buildInput(prompt, _ar, _imgs, opts) {
+      return { prompt, video_urls: opts.video_urls, duration: opts.duration || '5', resolution: opts.resolution || '1080p' };
+    },
+  },
+  'wan/turbo-image-to-video': {
+    name: 'Wan 2.2 A14B Turbo I2V',
+    type: 'market',
+    apiModel: 'wan/2-2-a14b-image-to-video-turbo',
+    requiresImage: true,
+    options: {
+      resolution: { type: 'string', enum: ['720p'], default: '720p' },
+      enable_prompt_expansion: { type: 'boolean', default: false },
+      seed: { type: 'number' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, image_url: imageUrls?.[0], resolution: opts.resolution || '720p', enable_prompt_expansion: opts.enable_prompt_expansion || false, ...(opts.seed !== undefined ? { seed: opts.seed } : {}) };
+    },
+  },
+  'wan/animate-move': {
+    name: 'Wan Animate Move',
+    type: 'market',
+    apiModel: 'wan/2-2-animate-move',
+    requiresImage: true,
+    options: {
+      video_url: { type: 'string', description: 'Motion reference video URL' },
+      resolution: { type: 'string', enum: ['480p', '580p', '720p'], default: '480p' },
+    },
+    buildInput(_prompt, _ar, imageUrls, opts) {
+      return { video_url: opts.video_url, image_url: imageUrls?.[0], resolution: opts.resolution || '480p' };
+    },
+  },
+  'wan/animate-replace': {
+    name: 'Wan Animate Replace',
+    type: 'market',
+    apiModel: 'wan/2-2-animate-replace',
+    requiresImage: true,
+    options: {
+      video_url: { type: 'string', description: 'Source video URL' },
+      resolution: { type: 'string', enum: ['480p', '580p', '720p'], default: '480p' },
+    },
+    buildInput(_prompt, _ar, imageUrls, opts) {
+      return { video_url: opts.video_url, image_url: imageUrls?.[0], resolution: opts.resolution || '480p' };
+    },
+  },
+
+  // ── Hailuo (MiniMax) ──
   'hailuo/text-to-video': {
-    name: 'Hailuo 02 Pro (MiniMax)',
+    name: 'Hailuo 02 Pro T2V',
     type: 'market',
     apiModel: 'hailuo/02-text-to-video-pro',
     aspectRatios: ['16:9', '9:16', '1:1'],
@@ -592,8 +793,81 @@ const VIDEO_MODEL_REGISTRY = {
       return { prompt, prompt_optimizer: opts.prompt_optimizer !== false };
     },
   },
+  'hailuo/text-to-video-standard': {
+    name: 'Hailuo 02 Standard T2V',
+    type: 'market',
+    apiModel: 'hailuo/02-text-to-video-standard',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'string', enum: ['6', '10'], default: '6' },
+      prompt_optimizer: { type: 'boolean', default: true },
+    },
+    buildInput(prompt, _aspectRatio, _imgs, opts) {
+      return { prompt, duration: opts.duration || '6', prompt_optimizer: opts.prompt_optimizer !== false };
+    },
+  },
+  'hailuo/image-to-video': {
+    name: 'Hailuo 02 Pro I2V',
+    type: 'market',
+    apiModel: 'hailuo/02-image-to-video-pro',
+    requiresImage: true,
+    options: {
+      prompt_optimizer: { type: 'boolean', default: true },
+      end_image_url: { type: 'string', description: 'Optional end frame image URL' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, image_url: imageUrls?.[0], prompt_optimizer: opts.prompt_optimizer !== false };
+      if (opts.end_image_url) input.end_image_url = opts.end_image_url;
+      return input;
+    },
+  },
+  'hailuo/image-to-video-standard': {
+    name: 'Hailuo 02 Standard I2V',
+    type: 'market',
+    apiModel: 'hailuo/02-image-to-video-standard',
+    requiresImage: true,
+    options: {
+      duration: { type: 'string', enum: ['6', '10'], default: '6' },
+      resolution: { type: 'string', enum: ['768P'], default: '768P' },
+      prompt_optimizer: { type: 'boolean', default: true },
+      end_image_url: { type: 'string', description: 'Optional end frame image URL' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, image_url: imageUrls?.[0], duration: opts.duration || '6', resolution: opts.resolution || '768P', prompt_optimizer: opts.prompt_optimizer !== false };
+      if (opts.end_image_url) input.end_image_url = opts.end_image_url;
+      return input;
+    },
+  },
+  'hailuo/2-3-image-to-video-pro': {
+    name: 'Hailuo 2.3 Pro I2V',
+    type: 'market',
+    apiModel: 'hailuo/2-3-image-to-video-pro',
+    requiresImage: true,
+    options: {
+      duration: { type: 'string', enum: ['6', '10'], default: '6' },
+      resolution: { type: 'string', enum: ['768P'], default: '768P' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, image_url: imageUrls?.[0], duration: opts.duration || '6', resolution: opts.resolution || '768P' };
+    },
+  },
+  'hailuo/2-3-image-to-video-standard': {
+    name: 'Hailuo 2.3 Standard I2V',
+    type: 'market',
+    apiModel: 'hailuo/2-3-image-to-video-standard',
+    requiresImage: true,
+    options: {
+      duration: { type: 'string', enum: ['6', '10'], default: '6' },
+      resolution: { type: 'string', enum: ['768P'], default: '768P' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, image_url: imageUrls?.[0], duration: opts.duration || '6', resolution: opts.resolution || '768P' };
+    },
+  },
+
+  // ── Kling ──
   'kling/text-to-video': {
-    name: 'Kling 2.6',
+    name: 'Kling 2.6 T2V',
     type: 'market',
     apiModel: 'kling-2.6/text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1'],
@@ -619,6 +893,20 @@ const VIDEO_MODEL_REGISTRY = {
       return { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, duration: String(opts.duration || '5'), sound: opts.sound || false };
     },
   },
+  'kling/motion-control': {
+    name: 'Kling 2.6 Motion Control',
+    type: 'market',
+    apiModel: 'kling-2.6/motion-control',
+    requiresImage: true,
+    options: {
+      video_urls: { type: 'array', description: 'Motion reference video URL(s)' },
+      mode: { type: 'string', enum: ['720p'], default: '720p' },
+      character_orientation: { type: 'string', enum: ['image'], default: 'image' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, input_urls: imageUrls, video_urls: opts.video_urls, mode: opts.mode || '720p', character_orientation: opts.character_orientation || 'image' };
+    },
+  },
   'kling-3/video': {
     name: 'Kling 3.0',
     type: 'market',
@@ -635,8 +923,43 @@ const VIDEO_MODEL_REGISTRY = {
       return input;
     },
   },
+  'kling-3/motion-control': {
+    name: 'Kling 3.0 Motion Control',
+    type: 'market',
+    apiModel: 'kling-3.0/motion-control',
+    requiresImage: true,
+    options: {
+      video_urls: { type: 'array', description: 'Motion reference video URL(s)' },
+      mode: { type: 'string', enum: ['720p'], default: '720p' },
+      character_orientation: { type: 'string', enum: ['image'], default: 'image' },
+      background_source: { type: 'string', enum: ['input_video'], default: 'input_video' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, input_urls: imageUrls, video_urls: opts.video_urls, mode: opts.mode || '720p', character_orientation: opts.character_orientation || 'image', background_source: opts.background_source || 'input_video' };
+    },
+  },
+  'kling/v2-1-standard': {
+    name: 'Kling V2.1 Standard',
+    type: 'market',
+    apiModel: 'kling/v2-1-standard',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'string', enum: ['5', '10'], default: '5' },
+      negative_prompt: { type: 'string' },
+      cfg_scale: { type: 'number', min: 0, max: 1, default: 0.5 },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      const input = { prompt, image_url: imageUrls?.[0], duration: opts.duration || '5' };
+      if (opts.negative_prompt) input.negative_prompt = opts.negative_prompt;
+      if (opts.cfg_scale !== undefined) input.cfg_scale = opts.cfg_scale;
+      return input;
+    },
+  },
+
+  // ── Grok Imagine ──
   'grok-imagine/text-to-video': {
-    name: 'Grok Imagine Video',
+    name: 'Grok Imagine T2V',
     type: 'market',
     apiModel: 'grok-imagine/text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1', '2:3', '3:2'],
@@ -647,6 +970,46 @@ const VIDEO_MODEL_REGISTRY = {
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
       return { prompt, aspect_ratio: aspectRatio, duration: opts.duration || '6', resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
+    },
+  },
+  'grok-imagine/image-to-video': {
+    name: 'Grok Imagine I2V',
+    type: 'market',
+    apiModel: 'grok-imagine/image-to-video',
+    requiresImage: true,
+    aspectRatios: ['16:9', '9:16', '1:1', '2:3', '3:2'],
+    options: {
+      duration: { type: 'string', enum: ['6', '10'], default: '6' },
+      resolution: { type: 'string', enum: ['480p', '720p'], default: '480p' },
+      mode: { type: 'string', enum: ['normal', 'quality'], default: 'normal' },
+    },
+    buildInput(prompt, _ar, imageUrls, opts) {
+      return { prompt, image_urls: imageUrls, duration: opts.duration || '6', resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
+    },
+  },
+  'grok-imagine/upscale': {
+    name: 'Grok Imagine Video Upscale',
+    type: 'market',
+    apiModel: 'grok-imagine/upscale',
+    options: {
+      task_id: { type: 'string', description: 'Task ID from a previously completed video generation task' },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      return { task_id: opts.task_id };
+    },
+  },
+
+  // ── Topaz (utility) ──
+  'topaz/video-upscale': {
+    name: 'Topaz Video Upscale',
+    type: 'market',
+    apiModel: 'topaz/video-upscale',
+    options: {
+      video_url: { type: 'string', description: 'Video URL to upscale' },
+      upscale_factor: { type: 'string', enum: ['2'], default: '2' },
+    },
+    buildInput(_prompt, _ar, _imgs, opts) {
+      return { video_url: opts.video_url, upscale_factor: opts.upscale_factor || '2' };
     },
   },
 };
@@ -881,7 +1244,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai. Available models: veo-3/text-to-video (Google, best quality), veo-3-fast/text-to-video (Google, faster), sora/text-to-video (OpenAI), seedance/text-to-video, seedance/image-to-video, wan/text-to-video, hailuo/text-to-video, kling/text-to-video, kling/image-to-video, kling-3/video (Kling 3.0), grok-imagine/text-to-video, runway/text-to-video. Polls until done and downloads to src/assets/raw/.`,
+      description: `Generate a video using kie.ai. Available models: veo-3/text-to-video (Google, best quality), sora/text-to-video (OpenAI), seedance/text-to-video, wan/text-to-video, hailuo/text-to-video, kling/text-to-video, kling/image-to-video, kling-3/video (Kling 3.0), grok-imagine/text-to-video, runway/text-to-video. Polls until done and downloads to src/assets/raw/.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1086,18 +1449,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'list_models': {
         const { filter, verbose } = args;
-        let entries = Object.entries(MODEL_REGISTRY);
-        if (filter) {
-          const f = filter.toLowerCase();
-          entries = entries.filter(([id, m]) => id.toLowerCase().includes(f) || m.name.toLowerCase().includes(f));
-        }
 
-        if (entries.length === 0) {
-          return { content: [{ type: 'text', text: `No models matching "${filter}". Try: gpt, flux, seedream, imagen, nano, grok, ideogram, qwen, recraft, z-image` }] };
-        }
-
-        const lines = entries.map(([id, m]) => {
+        const formatEntries = (entries, isVideo = false) => entries.map(([id, m]) => {
           let line = `**${m.name}** — \`${id}\``;
+          if (isVideo) line += ' [video]';
           if (m.requiresImage) line += ' [requires image]';
           if (m.aspectRatios?.length) line += `\n  Aspect ratios: ${m.aspectRatios.join(', ')}`;
           if (verbose && m.options) {
@@ -1117,7 +1472,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           return line;
         });
 
-        return { content: [{ type: 'text', text: lines.join('\n\n') }] };
+        let imageEntries = Object.entries(MODEL_REGISTRY);
+        let videoEntries = Object.entries(VIDEO_MODEL_REGISTRY);
+
+        if (filter) {
+          const f = filter.toLowerCase();
+          imageEntries = imageEntries.filter(([id, m]) => id.toLowerCase().includes(f) || m.name.toLowerCase().includes(f));
+          videoEntries = videoEntries.filter(([id, m]) => id.toLowerCase().includes(f) || m.name.toLowerCase().includes(f));
+        }
+
+        if (imageEntries.length === 0 && videoEntries.length === 0) {
+          return { content: [{ type: 'text', text: `No models matching "${filter}". Try: gpt, flux, seedream, imagen, nano, grok, ideogram, qwen, recraft, z-image, veo, sora, kling, wan, hailuo, seedance, runway` }] };
+        }
+
+        const sections = [];
+        if (imageEntries.length > 0) {
+          sections.push(`## Image Models (${imageEntries.length})\n\n` + formatEntries(imageEntries).join('\n\n'));
+        }
+        if (videoEntries.length > 0) {
+          sections.push(`## Video Models (${videoEntries.length})\n\n` + formatEntries(videoEntries, true).join('\n\n'));
+        }
+
+        return { content: [{ type: 'text', text: sections.join('\n\n---\n\n') }] };
       }
 
       case 'check_task': {
