@@ -8,7 +8,7 @@ const StaticConfig = {
   portraitWidth: 500,
   portraitHeight: 900,
 
-  backgroundColor: 0x1a0a2e,
+  backgroundColor: 0x000000,
 
   // Grid
   cols: 5,

@@ -133,14 +133,23 @@ export class Game {
   }
 
   private async loadAssets(): Promise<void> {
-    const [menuL, menuP, lsL, lsP, gameL, gameP] = await Promise.all([
-      Assets.load<Texture>(menuBgLandscapeUrl),
-      Assets.load<Texture>(menuBgPortraitUrl),
-      Assets.load<Texture>(levelSelectBgLandscapeUrl),
-      Assets.load<Texture>(levelSelectBgPortraitUrl),
-      Assets.load<Texture>(gameBgLandscapeUrl),
-      Assets.load<Texture>(gameBgPortraitUrl),
-    ]);
+    const urls = [
+      menuBgLandscapeUrl,
+      menuBgPortraitUrl,
+      levelSelectBgLandscapeUrl,
+      levelSelectBgPortraitUrl,
+      gameBgLandscapeUrl,
+      gameBgPortraitUrl,
+    ];
+    const results: Texture[] = [];
+    for (const url of urls) {
+      try {
+        results.push(await Assets.load<Texture>(url));
+      } catch (e) {
+        throw new Error(`Failed to load texture: ${url} — ${e}`, { cause: e });
+      }
+    }
+    const [menuL, menuP, lsL, lsP, gameL, gameP] = results;
     this.menuBgTextures = { landscape: menuL, portrait: menuP };
     this.levelSelectBgTextures = { landscape: lsL, portrait: lsP };
     this.gameBgTextures = { landscape: gameL, portrait: gameP };

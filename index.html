@@ -7,16 +7,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
   <!-- Fallback: font loads async, game works without it -->
-  <style>
-    @supports (padding-top: env(safe-area-inset-top)) {
-      html, body {
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
-      }
-    }
-  </style>
+  <!-- Game fills full viewport edge-to-edge; UI avoids safe areas via PixiJS positioning -->
   <title>Roxy's Magic Reels</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -62,6 +53,20 @@
   </style>
 </head>
 <body>
+  <div id="err-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:black;color:red;font-size:12px;padding:40px 16px;white-space:pre-wrap;overflow:auto;display:none"></div>
+  <script>
+    window.onerror = function(m,s,l,c,e) {
+      var d = document.getElementById('err-overlay');
+      d.style.display = 'block';
+      d.textContent = 'ERROR: ' + m + '\n\nSource: ' + s + ':' + l + ':' + c + '\n\n' + (e && e.stack ? e.stack : '');
+    };
+    window.addEventListener('unhandledrejection', function(ev) {
+      var d = document.getElementById('err-overlay');
+      d.style.display = 'block';
+      var r = ev.reason;
+      d.textContent = 'UNHANDLED REJECTION:\n\n' + (r && r.stack ? r.stack : r);
+    });
+  </script>
   <div id="loading">
     <div>Loading Roxy's Magic Reels...</div>
     <div class="bar"><div class="fill" id="load-fill"></div></div>
