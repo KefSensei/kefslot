@@ -468,54 +468,110 @@ const MODEL_REGISTRY = {
 };
 
 // ─── Video Model Registry ───
-// Video models use the same /api/v1/jobs/createTask endpoint as market image models.
+// Video models use either dedicated endpoints or the generic /api/v1/jobs/createTask endpoint.
+// Models with type='dedicated' have their own generate + poll endpoints.
+// Models with type='market' go through createTask and poll via /api/v1/jobs/recordInfo.
 const VIDEO_MODEL_REGISTRY = {
+  // ── Dedicated endpoint models ──
   'veo-3/text-to-video': {
-    name: 'Veo 3 (Google)',
+    name: 'Veo 3.1 Quality (Google)',
+    type: 'dedicated',
+    endpoint: '/api/v1/veo/generate',
+    pollEndpoint: '/api/v1/veo/record-info',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 5, max: 8, default: 8, description: 'Duration in seconds' },
-      negative_prompt: { type: 'string' },
+      enableFallback: { type: 'boolean', default: false, description: 'Fallback to backup model if unavailable' },
+      enableTranslation: { type: 'boolean', default: true, description: 'Auto-translate non-English prompts' },
     },
-    buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    buildBody(prompt, aspectRatio, imageUrls, opts) {
+      const body = { prompt, model: 'veo3', aspect_ratio: aspectRatio, ...opts };
+      if (imageUrls?.length) body.imageUrls = imageUrls;
+      return body;
     },
   },
-  'sora/text-to-video': {
-    name: 'Sora (OpenAI)',
+  'veo-3-fast/text-to-video': {
+    name: 'Veo 3.1 Fast (Google)',
+    type: 'dedicated',
+    endpoint: '/api/v1/veo/generate',
+    pollEndpoint: '/api/v1/veo/record-info',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 5, max: 20, default: 5, description: 'Duration in seconds' },
-      resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p' },
+      enableFallback: { type: 'boolean', default: false },
+      enableTranslation: { type: 'boolean', default: true },
+    },
+    buildBody(prompt, aspectRatio, imageUrls, opts) {
+      const body = { prompt, model: 'veo3_fast', aspect_ratio: aspectRatio, ...opts };
+      if (imageUrls?.length) body.imageUrls = imageUrls;
+      return body;
+    },
+  },
+  'runway/text-to-video': {
+    name: 'Runway Aleph',
+    type: 'dedicated',
+    endpoint: '/api/v1/runway/generate',
+    pollEndpoint: '/api/v1/runway/record-detail',
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    options: {
+      duration: { type: 'number', enum: [5, 10], default: 5, description: 'Duration in seconds' },
+      quality: { type: 'string', enum: ['720p', '1080p'], default: '720p' },
+    },
+    buildBody(prompt, aspectRatio, _imgs, opts) {
+      return { prompt, aspectRatio, duration: opts.duration || 5, quality: opts.quality || '720p' };
+    },
+  },
+
+  // ── Market models (createTask endpoint) ──
+  'sora/text-to-video': {
+    name: 'Sora 2 (OpenAI)',
+    type: 'market',
+    apiModel: 'sora-2-text-to-video',
+    aspectRatios: ['landscape', 'portrait', 'square'],
+    options: {
+      n_frames: { type: 'string', enum: ['10', '20'], default: '10', description: '10=short, 20=long' },
+      remove_watermark: { type: 'boolean', default: true },
+      upload_method: { type: 'string', default: 's3' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+      // Sora uses 'landscape'/'portrait'/'square' instead of ratios
+      let ar = aspectRatio;
+      if (ar === '16:9') ar = 'landscape';
+      else if (ar === '9:16') ar = 'portrait';
+      else if (ar === '1:1') ar = 'square';
+      return { prompt, aspect_ratio: ar, n_frames: opts.n_frames || '10', remove_watermark: opts.remove_watermark !== false, upload_method: opts.upload_method || 's3' };
     },
   },
   'seedance/text-to-video': {
-    name: 'Seedance (ByteDance)',
+    name: 'Seedance 1.5 Pro (ByteDance)',
+    type: 'market',
+    apiModel: 'bytedance/seedance-1.5-pro',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 5, max: 10, default: 5 },
+      duration: { type: 'number', enum: [8, 10], default: 8, description: 'Duration in seconds (8 or 10)' },
       resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p' },
+      generate_audio: { type: 'boolean', default: false },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+      return { prompt, aspect_ratio: aspectRatio, duration: String(opts.duration || 8), resolution: opts.resolution || '720p', generate_audio: opts.generate_audio || false };
     },
   },
   'seedance/image-to-video': {
-    name: 'Seedance I2V (ByteDance)',
+    name: 'Seedance 1.5 Pro I2V (ByteDance)',
+    type: 'market',
+    apiModel: 'bytedance/seedance-1.5-pro',
     requiresImage: true,
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 5, max: 10, default: 5 },
+      duration: { type: 'number', enum: [8, 10], default: 8 },
+      resolution: { type: 'string', enum: ['480p', '720p', '1080p'], default: '720p' },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
-      return { prompt, image_url: imageUrls?.[0], aspect_ratio: aspectRatio, ...opts };
+      return { prompt, input_urls: imageUrls, aspect_ratio: aspectRatio, duration: String(opts.duration || 8), resolution: opts.resolution || '720p' };
     },
   },
   'wan/text-to-video': {
-    name: 'Wan 2.5',
+    name: 'Wan 2.6',
+    type: 'market',
+    apiModel: 'wan/2-6-text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
       duration: { type: 'number', min: 3, max: 10, default: 5 },
@@ -525,45 +581,72 @@ const VIDEO_MODEL_REGISTRY = {
     },
   },
   'hailuo/text-to-video': {
-    name: 'Hailuo 02 (MiniMax)',
+    name: 'Hailuo 02 Pro (MiniMax)',
+    type: 'market',
+    apiModel: 'hailuo/02-text-to-video-pro',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 6, max: 10, default: 6 },
+      prompt_optimizer: { type: 'boolean', default: true, description: 'Optimize prompt for better results' },
     },
-    buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+    buildInput(prompt, _aspectRatio, _imgs, opts) {
+      return { prompt, prompt_optimizer: opts.prompt_optimizer !== false };
     },
   },
   'kling/text-to-video': {
-    name: 'Kling 3.0',
+    name: 'Kling 2.6',
+    type: 'market',
+    apiModel: 'kling-2.6/text-to-video',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', enum: [5, 10], default: 5 },
-      mode: { type: 'string', enum: ['standard', 'pro'], default: 'standard' },
+      duration: { type: 'string', enum: ['5', '10'], default: '5', description: 'Duration in seconds' },
+      sound: { type: 'boolean', default: false, description: 'Generate audio' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+      return { prompt, aspect_ratio: aspectRatio, duration: String(opts.duration || '5'), sound: opts.sound || false };
     },
   },
   'kling/image-to-video': {
-    name: 'Kling 3.0 I2V',
+    name: 'Kling 2.6 I2V',
+    type: 'market',
+    apiModel: 'kling-2.6/image-to-video',
     requiresImage: true,
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', enum: [5, 10], default: 5 },
+      duration: { type: 'string', enum: ['5', '10'], default: '5' },
+      sound: { type: 'boolean', default: false },
     },
     buildInput(prompt, aspectRatio, imageUrls, opts) {
-      return { prompt, image_url: imageUrls?.[0], aspect_ratio: aspectRatio, ...opts };
+      return { prompt, image_urls: imageUrls, aspect_ratio: aspectRatio, duration: String(opts.duration || '5'), sound: opts.sound || false };
     },
   },
-  'runway/text-to-video': {
-    name: 'Runway Aleph',
+  'kling-3/video': {
+    name: 'Kling 3.0',
+    type: 'market',
+    apiModel: 'kling-3.0/video',
     aspectRatios: ['16:9', '9:16', '1:1'],
     options: {
-      duration: { type: 'number', min: 5, max: 10, default: 5 },
+      duration: { type: 'string', enum: ['5', '10'], default: '5' },
+      mode: { type: 'string', enum: ['std', 'pro'], default: 'std' },
+      sound: { type: 'boolean', default: false },
+    },
+    buildInput(prompt, aspectRatio, imageUrls, opts) {
+      const input = { prompt, aspect_ratio: aspectRatio, duration: String(opts.duration || '5'), mode: opts.mode || 'std', sound: opts.sound || false, multi_shots: false };
+      if (imageUrls?.length) input.image_urls = imageUrls;
+      return input;
+    },
+  },
+  'grok-imagine/text-to-video': {
+    name: 'Grok Imagine Video',
+    type: 'market',
+    apiModel: 'grok-imagine/text-to-video',
+    aspectRatios: ['16:9', '9:16', '1:1', '2:3', '3:2'],
+    options: {
+      duration: { type: 'string', enum: ['6', '10'], default: '6' },
+      resolution: { type: 'string', enum: ['480p', '720p'], default: '480p' },
+      mode: { type: 'string', enum: ['normal', 'quality'], default: 'normal' },
     },
     buildInput(prompt, aspectRatio, _imgs, opts) {
-      return { prompt, aspect_ratio: aspectRatio, ...opts };
+      return { prompt, aspect_ratio: aspectRatio, duration: opts.duration || '6', resolution: opts.resolution || '480p', mode: opts.mode || 'normal' };
     },
   },
 };
@@ -579,21 +662,90 @@ async function kieRequest(method, path, body) {
     headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
   };
   if (body) opts.body = JSON.stringify(body);
+  console.error(`[kie-mcp] ${method} ${path}${body ? ' body=' + JSON.stringify(body).slice(0, 200) : ''}`);
   const res = await fetch(url, opts);
-  const json = await res.json();
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`kie.ai API returned non-JSON (HTTP ${res.status}): ${text.slice(0, 500)}`);
+  }
+  console.error(`[kie-mcp] ${method} ${path} → HTTP ${res.status}, code=${json.code}, msg=${json.msg}, keys=${Object.keys(json).join(',')}`);
   if (res.status !== 200) {
-    throw new Error(`kie.ai API error ${res.status}: ${JSON.stringify(json)}`);
+    throw new Error(`kie.ai API HTTP error ${res.status}: ${JSON.stringify(json)}`);
+  }
+  if (json.code && json.code !== 200) {
+    throw new Error(`kie.ai API error code ${json.code}: ${json.msg || JSON.stringify(json)}`);
   }
   return json;
 }
 
-async function pollTask(taskId, maxWaitMs = 600000) {
+// Polling endpoint config for dedicated models.
+// Image models (GPT-4o, Flux Kontext) use successFlag-based polling.
+// Video models (Veo, Runway) use their own status formats.
+// Market models use the generic /api/v1/jobs/recordInfo endpoint.
+const DEDICATED_POLL_ENDPOINTS = {
+  // Image models
+  'gpt4o': '/api/v1/gpt4o-image/record-info',
+  'flux-kontext-pro': '/api/v1/flux/kontext/record-info',
+  'flux-kontext-max': '/api/v1/flux/kontext/record-info',
+  // Video models — poll endpoints looked up from VIDEO_MODEL_REGISTRY
+};
+
+// Resolve poll endpoint: check image dedicated endpoints first, then video model registry
+function getPollEndpoint(modelId) {
+  if (DEDICATED_POLL_ENDPOINTS[modelId]) return DEDICATED_POLL_ENDPOINTS[modelId];
+  const videoDef = VIDEO_MODEL_REGISTRY[modelId];
+  if (videoDef?.pollEndpoint) return videoDef.pollEndpoint;
+  return null;
+}
+
+async function pollTask(taskId, maxWaitMs = 600000, modelId = null) {
+  const dedicatedEndpoint = modelId && getPollEndpoint(modelId);
   const start = Date.now();
+
   while (Date.now() - start < maxWaitMs) {
-    const result = await kieRequest('GET', `/api/v1/jobs/recordInfo?taskId=${taskId}`);
-    const data = result.data || result;
-    if (data.state === 'success') return data;
-    if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+    if (dedicatedEndpoint) {
+      // Dedicated models use their own polling endpoint
+      const result = await kieRequest('GET', `${dedicatedEndpoint}?taskId=${taskId}`);
+      const data = result.data || result;
+
+      // successFlag-based models: GPT-4o, Flux Kontext, Veo
+      // successFlag: 0=processing, 1=success, 2+=failed
+      if (data.successFlag !== undefined) {
+        if (data.successFlag === 1) {
+          const normalized = { ...data, state: 'success' };
+          // GPT-4o: response.result_urls (snake_case)
+          if (data.response?.result_urls) {
+            normalized.resultJson = JSON.stringify({ resultUrls: data.response.result_urls });
+          }
+          // Veo: response.resultUrls (camelCase)
+          if (data.response?.resultUrls) {
+            normalized.resultJson = JSON.stringify({ resultUrls: data.response.resultUrls });
+          }
+          // Flux Kontext: resultImageUrl at top level
+          if (data.resultImageUrl) {
+            normalized.resultJson = JSON.stringify({ resultImageUrl: data.resultImageUrl });
+          }
+          return normalized;
+        }
+        if (data.successFlag >= 2) {
+          throw new Error(`Task failed (flag=${data.successFlag}): ${data.errorMessage || data.failMsg || 'Unknown'}`);
+        }
+      }
+      // state-based models: Runway (same format as market models)
+      else if (data.state) {
+        if (data.state === 'success') return data;
+        if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+      }
+    } else {
+      // Market models use the generic recordInfo endpoint
+      const result = await kieRequest('GET', `/api/v1/jobs/recordInfo?taskId=${taskId}`);
+      const data = result.data || result;
+      if (data.state === 'success') return data;
+      if (data.state === 'fail') throw new Error(`Task failed: ${data.failMsg || 'Unknown'} (code: ${data.failCode})`);
+    }
     await new Promise((r) => setTimeout(r, 3000));
   }
   throw new Error(`Task ${taskId} timed out after ${maxWaitMs / 1000}s`);
@@ -617,6 +769,8 @@ function extractResultUrls(result) {
     }
   }
   if (result.resultUrls) urls = [...urls, ...result.resultUrls];
+  // Runway video: videoInfo.videoUrl
+  if (result.videoInfo?.videoUrl) urls.push(result.videoInfo.videoUrl);
   if (urls.length === 0 && result.url) urls = [result.url];
   // Deduplicate
   return [...new Set(urls)];
@@ -727,7 +881,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'generate_video',
-      description: `Generate a video using kie.ai. Available models: veo-3/text-to-video (Google, best quality), sora/text-to-video (OpenAI), seedance/text-to-video, seedance/image-to-video, wan/text-to-video, hailuo/text-to-video, kling/text-to-video, kling/image-to-video, runway/text-to-video. Polls until done and downloads to src/assets/raw/.`,
+      description: `Generate a video using kie.ai. Available models: veo-3/text-to-video (Google, best quality), veo-3-fast/text-to-video (Google, faster), sora/text-to-video (OpenAI), seedance/text-to-video, seedance/image-to-video, wan/text-to-video, hailuo/text-to-video, kling/text-to-video, kling/image-to-video, kling-3/video (Kling 3.0), grok-imagine/text-to-video, runway/text-to-video. Polls until done and downloads to src/assets/raw/.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -862,17 +1016,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const body = modelDef.buildBody(prompt, aspect_ratio, image_urls, model_options);
           body.callBackUrl = undefined; // We poll instead
           const result = await kieRequest('POST', modelDef.endpoint, body);
-          taskId = result.data?.taskId;
+          taskId = result.data?.taskId || result.taskId;
+          if (!taskId) {
+            return { content: [{ type: 'text', text: `Failed to create task — no taskId in response.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
+          }
         } else {
           // Market models use createTask
           const input = modelDef.buildInput(prompt, aspect_ratio, image_urls, model_options);
           const body = { model: modelId, input };
           const result = await kieRequest('POST', '/api/v1/jobs/createTask', body);
-          taskId = result.data?.taskId;
-        }
-
-        if (!taskId) {
-          return { content: [{ type: 'text', text: 'Failed to create task — no taskId returned' }] };
+          taskId = result.data?.taskId || result.taskId;
+          if (!taskId) {
+            return { content: [{ type: 'text', text: `Failed to create task — no taskId in response.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
+          }
         }
 
         const taskEntry = {
@@ -885,8 +1041,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
         taskHistory.push(taskEntry);
 
-        // Poll until done
-        const result = await pollTask(taskId);
+        // Poll until done — pass modelId so dedicated endpoints use their own polling URL
+        const result = await pollTask(taskId, 600000, modelId);
         const resultUrls = extractResultUrls(result);
 
         if (resultUrls.length === 0) {
@@ -1045,14 +1201,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const outFilename = filename || `${safeModelName}-${ts}.mp4`;
         const outPath = join(RAW_DIR, outFilename);
 
-        const input = modelDef.buildInput(prompt, aspect_ratio, image_urls, model_options);
-        const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: modelId, input });
-        const taskId = result.data?.taskId;
-        if (!taskId) return { content: [{ type: 'text', text: 'Failed to create video task — no taskId returned' }] };
+        let taskId;
+
+        if (modelDef.type === 'dedicated') {
+          // Dedicated endpoint models (Veo, Runway) have their own generate URL
+          const body = modelDef.buildBody(prompt, aspect_ratio, image_urls, model_options);
+          const result = await kieRequest('POST', modelDef.endpoint, body);
+          taskId = result.data?.taskId || result.taskId;
+        } else {
+          // Market models use the generic createTask endpoint with the API model name
+          const input = modelDef.buildInput(prompt, aspect_ratio, image_urls, model_options);
+          const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: modelDef.apiModel, input });
+          taskId = result.data?.taskId || result.taskId;
+        }
+
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to create video task — no taskId returned.\nCheck model "${modelId}" is valid.` }] };
 
         taskHistory.push({ taskId, model: modelId, prompt: prompt?.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
 
-        const pollResult = await pollTask(taskId, 900000); // 15min max for video
+        // Use dedicated poll endpoint if available, otherwise generic market polling
+        const pollEndpoint = modelDef.pollEndpoint || null;
+        const pollResult = await pollTask(taskId, 900000, pollEndpoint ? modelId : null); // 15min max for video
         const resultUrls = extractResultUrls(pollResult);
         if (resultUrls.length === 0) return { content: [{ type: 'text', text: `Task ${taskId} done but no result URLs.\n${JSON.stringify(pollResult, null, 2)}` }] };
 
@@ -1076,8 +1245,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (title) body.title = title;
 
         const result = await kieRequest('POST', '/api/v1/generate', body);
-        const taskId = result.data?.taskId;
-        if (!taskId) return { content: [{ type: 'text', text: 'Failed to start music generation — no taskId returned' }] };
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start music generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         taskHistory.push({ taskId, model: `suno-${model}`, prompt: prompt.slice(0, 80), filename: outFilename, status: 'polling', createdAt: new Date().toISOString() });
 
@@ -1133,8 +1302,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (prompt_influence !== undefined) input.prompt_influence = prompt_influence;
 
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/sound-effect-v2', input });
-        const taskId = result.data?.taskId;
-        if (!taskId) return { content: [{ type: 'text', text: 'Failed to start SFX generation' }] };
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start SFX generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         const pollResult = await pollTask(taskId, 60000);
         const urls = extractResultUrls(pollResult);
@@ -1155,8 +1324,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (voice_id) input.voice_id = voice_id;
 
         const result = await kieRequest('POST', '/api/v1/jobs/createTask', { model: 'elevenlabs/text-to-speech-turbo-2-5', input });
-        const taskId = result.data?.taskId;
-        if (!taskId) return { content: [{ type: 'text', text: 'Failed to start TTS generation' }] };
+        const taskId = result.data?.taskId || result.taskId;
+        if (!taskId) return { content: [{ type: 'text', text: `Failed to start TTS generation — no taskId returned.\nAPI response: ${JSON.stringify(result, null, 2)}` }] };
 
         const pollResult = await pollTask(taskId, 60000);
         const urls = extractResultUrls(pollResult);
