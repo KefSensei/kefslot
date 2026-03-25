@@ -2,12 +2,52 @@ import { Application, Rectangle } from 'pixi.js';
 import { Game } from '@/core/Game';
 import { GameConfig } from '@/config/GameConfig';
 import gsap from 'gsap';
+import introVideoUrl from '@/assets/video/intro.mp4';
 
 declare global {
   interface Window {
     __kefslot_app?: Application;
     __kefslot_resize?: () => void;
+    __kefslot_intro_done?: boolean;
   }
+}
+
+function playIntro(): Promise<void> {
+  // Skip on HMR reloads
+  if (window.__kefslot_intro_done) {
+    const el = document.getElementById('intro-video');
+    if (el) el.style.display = 'none';
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const container = document.getElementById('intro-video');
+    const vid = document.getElementById('intro-vid') as HTMLVideoElement | null;
+    if (!container || !vid) {
+      resolve();
+      return;
+    }
+
+    const done = () => {
+      window.__kefslot_intro_done = true;
+      container.style.transition = 'opacity 0.5s';
+      container.style.opacity = '0';
+      setTimeout(() => {
+        container.style.display = 'none';
+      }, 500);
+      resolve();
+    };
+
+    vid.src = introVideoUrl;
+    vid.onended = done;
+    vid.onerror = done;
+    container.onclick = done;
+
+    // Fallback: auto-skip after 20s in case video stalls
+    setTimeout(done, 20000);
+
+    vid.play().catch(done);
+  });
 }
 
 const dbg = (msg: string) => {
@@ -19,6 +59,13 @@ const dbg = (msg: string) => {
 };
 
 async function boot() {
+  // Play intro video first
+  await playIntro();
+
+  // Show loading indicator
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.style.display = 'block';
+
   dbg('boot: start');
   // Clean up previous instance (HMR)
   if (window.__kefslot_app) {
@@ -104,8 +151,8 @@ async function boot() {
   dbg('boot: Game.init done');
 
   // Remove loading indicator
-  const loadingEl = document.getElementById('loading');
-  if (loadingEl) loadingEl.style.display = 'none';
+  const loadEl = document.getElementById('loading');
+  if (loadEl) loadEl.style.display = 'none';
 
   // Initial resize after game scenes are ready
   resize();

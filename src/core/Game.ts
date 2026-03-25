@@ -146,7 +146,9 @@ export class Game {
       try {
         results.push(await Assets.load<Texture>(url));
       } catch (e) {
-        throw new Error(`Failed to load texture: ${url} — ${e}`, { cause: e });
+        const err = new Error(`Failed to load texture: ${url} — ${e}`);
+        (err as unknown as Record<string, unknown>).cause = e;
+        throw err;
       }
     }
     const [menuL, menuP, lsL, lsP, gameL, gameP] = results;
