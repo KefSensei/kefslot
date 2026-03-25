@@ -6,6 +6,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Fallback: font loads async, game works without it -->
+  <style>
+    @supports (padding-top: env(safe-area-inset-top)) {
+      html, body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+      }
+    }
+  </style>
   <title>Roxy's Magic Reels</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
