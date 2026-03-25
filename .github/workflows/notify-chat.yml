@@ -1,0 +1,19 @@
+name: Notify Google Chat
+
+on:
+  pull_request:
+    types: [opened, closed]  # 'closed' + merged=true = merged PR
+  issues:
+    types: [closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send PR / Issue notification
+        run: |
+          curl -X POST "${{ secrets.GOOGLE_CHAT_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "📦 *${{ github.event_name }}* by ${{ github.actor }} on `${{ github.repository }}`\n${{ github.event.pull_request.html_url || github.event.issue.html_url }}"
+            }'
