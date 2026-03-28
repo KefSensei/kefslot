@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "lsof -ti:3005 > /dev/null 2>&1 || (nohup node /Users/eb/Documents/Projects/KefSlot/node_modules/.bin/vite --port 3005 --host > /tmp/kefslot-vite.log 2>&1 &); echo '{\"systemMessage\": \"Dev server running at http://localhost:3005\"}'"
+            "command": "lsof -ti:3005 > /dev/null 2>&1 || (nohup node /Users/db/repos/KefSensei/kefslot/node_modules/.bin/vite --port 3005 --host > /tmp/kefslot-vite.log 2>&1 &); echo '{\"systemMessage\": \"Dev server running at http://localhost:3005\"}'"
           }
         ]
       }
@@ -13,13 +13,23 @@
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "cd /Users/eb/Documents/Projects/KefSlot && npx tsc --noEmit --pretty 2>&1 | tail -20"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/db/repos/KefSensei/kefslot && npx tsc --noEmit --pretty 2>&1 | tail -20"
+          }
+        ]
       }
     ],
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
-        "command": "case \"$CLAUDE_FILE_PATHS\" in *package-lock*|*dist/*|*node_modules/*) echo 'BLOCK: Protected file — edit manually' >&2; exit 2;; esac"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATHS\" in *package-lock*|*dist/*|*node_modules/*) echo 'BLOCK: Protected file — edit manually' >&2; exit 2;; esac"
+          }
+        ]
       }
     ]
   }
