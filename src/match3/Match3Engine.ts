@@ -4,7 +4,6 @@ import { GameConfig } from '@/config/GameConfig';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { weightedRandom } from '@/utils/MathUtils';
 import { events } from '@/core/EventBus';
-import { MechanicsEngine, MechanicEvent } from '@/mechanics/MechanicsEngine';
 
 export interface SwapResult {
   valid: boolean;
@@ -13,20 +12,16 @@ export interface SwapResult {
   score: number;
   cascades: number;
   blockersDestroyed: number;
-  mechanicEvents: MechanicEvent[];
+  scattersCleared: number;
+  wildSubstitutions: { row: number; col: number }[]; // cells where wild matched non-wild
 }
 
 export class Match3Engine {
   private cascade = new CascadeEngine();
-  private mechanics = new MechanicsEngine();
   private grid: (CellData | null)[][] = [];
   private rows = GameConfig.rows;
   private cols = GameConfig.cols;
   private currentLevel = 1;
-
-  getMechanics(): MechanicsEngine {
-    return this.mechanics;
-  }
 
   getGrid(): (CellData | null)[][] {
     return this.grid;
@@ -34,25 +29,10 @@ export class Match3Engine {
 
   setGrid(grid: (CellData | null)[][]): void {
     this.grid = grid;
-    this.mechanics.setGrid(grid);
   }
 
   setLevel(level: number): void {
     this.currentLevel = level;
-  }
-
-  /** Set the active LevelDef for mechanics engine */
-  setLevelDef(levelDef: import('@/models/Level').LevelDef): void {
-    this.mechanics.setLevel(levelDef);
-    this.currentLevel = levelDef.id;
-    // Update grid dimensions if custom
-    if (levelDef.gridSize) {
-      this.rows = levelDef.gridSize.rows;
-      this.cols = levelDef.gridSize.cols;
-    } else {
-      this.rows = GameConfig.rows;
-      this.cols = GameConfig.cols;
-    }
   }
 
   // Check if a swap between two adjacent cells is valid (produces at least one match)
@@ -61,15 +41,6 @@ export class Match3Engine {
     if (!this.grid[r1][c1] || !this.grid[r2][c2]) return false;
     // Blockers cannot be swapped
     if (this.grid[r1][c1]!.isBlocker || this.grid[r2][c2]!.isBlocker) return false;
-
-    // Mechanics engine additional swap restrictions
-    if (!this.mechanics.canSwap(r1, c1) || !this.mechanics.canSwap(r2, c2)) return false;
-
-    // Check total swap budget
-    if (!this.mechanics.hasSwapsRemaining()) return false;
-
-    // Power-up combo is always valid (Issue #18)
-    if (this.mechanics.isPowerUpCombo(r1, c1, r2, c2)) return true;
 
     // Swap temporarily
     this.swap(r1, c1, r2, c2);
@@ -82,67 +53,67 @@ export class Match3Engine {
 
   // Execute a swap and resolve all resulting matches + cascades
   async executeSwap(r1: number, c1: number, r2: number, c2: number): Promise<SwapResult> {
-    const emptyResult: SwapResult = {
-      valid: false,
-      matches: [],
-      powerUpsCreated: [],
-      score: 0,
-      cascades: 0,
-      blockersDestroyed: 0,
-      mechanicEvents: [],
-    };
-
     if (!this.isValidSwap(r1, c1, r2, c2)) {
-      this.mechanics.onInvalidSwap();
-      return emptyResult;
-    }
-
-    // Check for power-up combo (Issue #18)
-    const comboType = this.mechanics.isPowerUpCombo(r1, c1, r2, c2);
-    if (comboType) {
-      this.swap(r1, c1, r2, c2);
-      const comboResult = this.mechanics.executePowerUpCombo(comboType, r1, c1, r2, c2);
-      // Resolve cascades after combo
-      this.applyGravity();
-      this.fillEmptySpaces();
       return {
-        valid: true,
+        valid: false,
         matches: [],
         powerUpsCreated: [],
-        score: comboResult.score,
+        score: 0,
         cascades: 0,
         blockersDestroyed: 0,
-        mechanicEvents: [{ type: 'powerUpCombo', data: { comboType, cleared: comboResult.cleared } }],
+        scattersCleared: 0,
+        wildSubstitutions: [],
       };
     }
 
     this.swap(r1, c1, r2, c2);
     events.emit('swap', { r1, c1, r2, c2 });
 
-    // Mechanics swap hook
-    const swapResult = this.mechanics.onSwap(r1, c1, r2, c2);
-    const allMechanicEvents = [...swapResult.events];
-
     let totalScore = 0;
     let cascadeLevel = 0;
     let totalBlockersDestroyed = 0;
+    let totalScattersCleared = 0;
     const allMatches: MatchGroup[] = [];
     const allPowerUps: { row: number; col: number; type: PowerUpType }[] = [];
+    const allWildSubs: { row: number; col: number }[] = [];
 
     // Resolve cascades
     let matches = this.cascade.findMatches(this.grid);
     while (matches.length > 0) {
-      const multiplier = this.cascade.getMultiplier(cascadeLevel) * swapResult.bonusMultiplier;
+      const cascadeMultiplier = this.cascade.getMultiplier(cascadeLevel);
 
       for (const match of matches) {
-        // Score
+        // Base score for match size
         const baseScore =
           match.cells.length >= 5
             ? GameConfig.match5Score
             : match.cells.length >= 4
               ? GameConfig.match4Score
               : GameConfig.match3Score;
-        totalScore += baseScore * multiplier;
+
+        // Apply tile multipliers per-cell (bonus on top of base score)
+        let tileBonus = 0;
+        for (const pos of match.cells) {
+          const cell = this.grid[pos.row]?.[pos.col];
+          if (cell && cell.tileMultiplier > 1) {
+            // Each cell on a multiplier tile adds (multiplier-1) × per-cell share of base score
+            const perCell = baseScore / match.cells.length;
+            tileBonus += perCell * (cell.tileMultiplier - 1);
+          }
+          // Track wild substitutions
+          if (cell?.symbol.isWild && match.symbolId !== cell.symbol.id) {
+            allWildSubs.push({ row: pos.row, col: pos.col });
+          }
+        }
+
+        totalScore += (baseScore + tileBonus) * cascadeMultiplier;
+
+        // Count scatters in cleared cells
+        for (const pos of match.cells) {
+          if (this.grid[pos.row]?.[pos.col]?.symbol.isScatter) {
+            totalScattersCleared++;
+          }
+        }
 
         // Create power-ups for 4+ matches
         const powerUp = this.determinePowerUp(match);
@@ -156,11 +127,6 @@ export class Match3Engine {
       // Remove matched cells
       this.clearMatches(matches);
       events.emit('matchCleared', { matches, cascadeLevel });
-
-      // Mechanics match hook
-      const matchResult = this.mechanics.onMatchCleared(matches);
-      totalScore += matchResult.bonusScore;
-      allMechanicEvents.push(...matchResult.events);
 
       // Damage blockers adjacent to cleared cells
       const allCells = matches.flatMap((m) => m.cells);
@@ -181,19 +147,13 @@ export class Match3Engine {
         }
       }
 
-      // Gravity: drop symbols down (or up if gravity flipped)
+      // Gravity: drop symbols down
       this.applyGravity();
       events.emit('gravityApplied');
 
       // Fill empty spaces
       this.fillEmptySpaces();
       events.emit('gridFilled');
-
-      // Check for mega power-up (Issue #20)
-      const mega = this.mechanics.findMegaPowerUp();
-      if (mega) {
-        allMechanicEvents.push({ type: 'megaPowerUpReady', data: { cells: mega.cells } });
-      }
 
       cascadeLevel++;
       matches = this.cascade.findMatches(this.grid);
@@ -206,7 +166,8 @@ export class Match3Engine {
       score: totalScore,
       cascades: cascadeLevel,
       blockersDestroyed: totalBlockersDestroyed,
-      mechanicEvents: allMechanicEvents,
+      scattersCleared: totalScattersCleared,
+      wildSubstitutions: allWildSubs,
     };
   }
 
@@ -256,7 +217,9 @@ export class Match3Engine {
     return { cleared, score: cleared.length * GameConfig.baseSymbolScore * 3 };
   }
 
-  /** Damage blockers adjacent to cleared cells. Returns damaged and destroyed blocker positions. */
+  /** Damage blockers adjacent to cleared cells. Returns damaged and destroyed blocker positions.
+   *  Chain blockers: when one in a chain is destroyed, deals 1 hit to the next blocker sharing the same chainId.
+   */
   damageAdjacentBlockers(clearedPositions: { row: number; col: number }[]): {
     damaged: { row: number; col: number; newHealth: number }[];
     destroyed: { row: number; col: number }[];
@@ -264,6 +227,40 @@ export class Match3Engine {
     const damaged: { row: number; col: number; newHealth: number }[] = [];
     const destroyed: { row: number; col: number }[] = [];
     const processed = new Set<string>();
+
+    const damageBlockerAt = (r: number, c: number): void => {
+      const key = `${r},${c}`;
+      if (processed.has(key)) return;
+      const cell = this.grid[r]?.[c];
+      if (!cell?.isBlocker) return;
+
+      processed.add(key);
+      cell.blockerHealth--;
+      if (cell.blockerHealth <= 0) {
+        const chainId = cell.chainId;
+        cell.isBlocker = false;
+        cell.blockerHealth = 0;
+        cell.chainId = null;
+        destroyed.push({ row: r, col: c });
+        events.emit('blockerDestroyed', { row: r, col: c, chainId });
+
+        // Chain propagation: weaken the next blocker in the same chain
+        if (chainId !== null) {
+          for (let rr = 0; rr < this.rows; rr++) {
+            for (let cc = 0; cc < this.cols; cc++) {
+              const next = this.grid[rr]?.[cc];
+              if (next?.isBlocker && next.chainId === chainId && !processed.has(`${rr},${cc}`)) {
+                damageBlockerAt(rr, cc);
+                return; // only propagate to the first surviving link
+              }
+            }
+          }
+        }
+      } else {
+        damaged.push({ row: r, col: c, newHealth: cell.blockerHealth });
+        events.emit('blockerDamaged', { row: r, col: c, newHealth: cell.blockerHealth });
+      }
+    };
 
     for (const pos of clearedPositions) {
       const neighbors = [
@@ -274,28 +271,58 @@ export class Match3Engine {
       ];
       for (const n of neighbors) {
         if (n.row < 0 || n.row >= this.rows || n.col < 0 || n.col >= this.cols) continue;
-        const key = `${n.row},${n.col}`;
-        if (processed.has(key)) continue;
-
-        const cell = this.grid[n.row]?.[n.col];
-        if (cell?.isBlocker) {
-          // Thorns can't be broken by adjacent matches (only power-ups)
-          if (cell.blockerType === 'thorn') continue;
-
-          processed.add(key);
-          cell.blockerHealth--;
-          if (cell.blockerHealth <= 0) {
-            cell.isBlocker = false;
-            cell.blockerHealth = 0;
-            cell.blockerType = null;
-            destroyed.push({ row: n.row, col: n.col });
-          } else {
-            damaged.push({ row: n.row, col: n.col, newHealth: cell.blockerHealth });
-          }
-        }
+        damageBlockerAt(n.row, n.col);
       }
     }
     return { damaged, destroyed };
+  }
+
+  /** Place multiplier tiles randomly on non-blocker cells. count/2 are ×2, remainder are ×3. */
+  placeMultiplierTiles(count: number): void {
+    const candidates: { r: number; c: number }[] = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.grid[r][c] && !this.grid[r][c]!.isBlocker) {
+          candidates.push({ r, c });
+        }
+      }
+    }
+    // Shuffle and pick `count` positions
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    const picks = candidates.slice(0, count);
+    picks.forEach((pos, i) => {
+      const cell = this.grid[pos.r][pos.c];
+      if (cell) cell.tileMultiplier = i < Math.ceil(count / 2) ? 2 : 3;
+    });
+  }
+
+  /** Preserve tileMultiplier on cells that survive a gravity/fill pass. */
+  transferTileMultipliers(snapshot: Map<string, number>): void {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.grid[r][c];
+        if (cell) {
+          cell.tileMultiplier = snapshot.get(`${r},${c}`) ?? 0;
+        }
+      }
+    }
+  }
+
+  /** Snapshot current tileMultiplier layout (call before gravity). */
+  snapshotTileMultipliers(): Map<string, number> {
+    const snap = new Map<string, number>();
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.grid[r][c];
+        if (cell && cell.tileMultiplier > 0) {
+          snap.set(`${r},${c}`, cell.tileMultiplier);
+        }
+      }
+    }
+    return snap;
   }
 
   /** Find a valid swap hint — returns the first valid adjacent pair or null */
@@ -315,20 +342,29 @@ export class Match3Engine {
     return null;
   }
 
-  determinePowerUp(match: MatchGroup): { row: number; col: number; type: PowerUpType } | null {
-    if (match.cells.length >= 5) {
-      const mid = match.cells[Math.floor(match.cells.length / 2)];
+  private determinePowerUp(match: MatchGroup): { row: number; col: number; type: PowerUpType } | null {
+    if (this.currentLevel < 3) return null; // no power-ups before level 3
+
+    const mid = match.cells[Math.floor(match.cells.length / 2)];
+
+    if (match.cells.length >= 5 && this.currentLevel >= 6) {
+      // Rainbow only from level 6+
       return { row: mid.row, col: mid.col, type: 'rainbow' };
     }
     if (match.cells.length === 4) {
-      // Check if it's a line or L-shape
+      // Check if it's a straight line (blast) or L-shape (bomb)
       const isHorizontal = match.cells.every((c) => c.row === match.cells[0].row);
       const isVertical = match.cells.every((c) => c.col === match.cells[0].col);
-      const mid = match.cells[Math.floor(match.cells.length / 2)];
       if (isHorizontal || isVertical) {
+        // Blast (row/col clear) — available from level 3
         return { row: mid.row, col: mid.col, type: 'blast' };
       }
-      return { row: mid.row, col: mid.col, type: 'bomb' };
+      // Bomb (3×3 clear) — available from level 4
+      if (this.currentLevel >= 4) {
+        return { row: mid.row, col: mid.col, type: 'bomb' };
+      }
+      // L-shape at level 3 falls back to blast
+      return { row: mid.row, col: mid.col, type: 'blast' };
     }
     return null;
   }
@@ -356,75 +392,28 @@ export class Match3Engine {
   private clearMatches(matches: MatchGroup[]): void {
     for (const match of matches) {
       for (const pos of match.cells) {
-        const cell = this.grid[pos.row][pos.col];
-        if (cell?.isBlocker) {
-          // Ice/chain/frozen: matching breaks one layer of the blocker
-          cell.blockerHealth--;
-          if (cell.blockerHealth <= 0) {
-            cell.isBlocker = false;
-            cell.blockerHealth = 0;
-            cell.blockerType = null;
-            // Cell is freed — remove it as part of the match
-            this.grid[pos.row][pos.col] = null;
-          }
-          // If health > 0, ice cracked but cell stays (symbol preserved for next match)
-        } else {
-          this.grid[pos.row][pos.col] = null;
-        }
+        this.grid[pos.row][pos.col] = null;
       }
     }
   }
 
   private applyGravity(): void {
-    const direction = this.mechanics.getGravityDirection();
-
     for (let c = 0; c < this.cols; c++) {
-      if (direction === 'down') {
-        let writeRow = this.rows - 1;
-        for (let r = this.rows - 1; r >= 0; r--) {
-          const cell = this.grid[r][c];
-          if (cell?.isBlocker || cell?.isDragonEgg || cell?.isChest) {
-            // Fixed objects stay in place — restart write pointer above
-            writeRow = r - 1;
-            continue;
-          }
-          if (cell?.isActive === false) {
-            writeRow = r - 1;
-            continue;
-          }
-          if (cell) {
-            if (r !== writeRow) {
-              this.grid[writeRow][c] = cell;
-              cell.row = writeRow;
-              this.grid[r][c] = null;
-
-              // Check transformer tile
-              this.mechanics.handleTransformer(writeRow, c);
-            }
-            writeRow--;
-          }
+      let writeRow = this.rows - 1;
+      for (let r = this.rows - 1; r >= 0; r--) {
+        const cell = this.grid[r][c];
+        if (cell?.isBlocker) {
+          // Blocker stays fixed — restart write pointer above it
+          writeRow = r - 1;
+          continue;
         }
-      } else {
-        // Gravity up
-        let writeRow = 0;
-        for (let r = 0; r < this.rows; r++) {
-          const cell = this.grid[r][c];
-          if (cell?.isBlocker || cell?.isDragonEgg || cell?.isChest) {
-            writeRow = r + 1;
-            continue;
+        if (cell) {
+          if (r !== writeRow) {
+            this.grid[writeRow][c] = cell;
+            cell.row = writeRow;
+            this.grid[r][c] = null;
           }
-          if (cell?.isActive === false) {
-            writeRow = r + 1;
-            continue;
-          }
-          if (cell) {
-            if (r !== writeRow) {
-              this.grid[writeRow][c] = cell;
-              cell.row = writeRow;
-              this.grid[r][c] = null;
-            }
-            writeRow++;
-          }
+          writeRow--;
         }
       }
     }

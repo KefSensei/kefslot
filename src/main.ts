@@ -66,10 +66,14 @@ async function boot() {
       GameConfig.activeWidth = GameConfig.portraitWidth;
       GameConfig.activeHeight = GameConfig.portraitHeight;
       GameConfig.cellSize = GameConfig.cellSizePortrait;
+      GameConfig.cellWidth = GameConfig.cellWidthPortrait;
+      GameConfig.cellHeight = GameConfig.cellHeightPortrait;
     } else {
       GameConfig.activeWidth = GameConfig.width;
       GameConfig.activeHeight = GameConfig.height;
       GameConfig.cellSize = GameConfig.cellSizeLandscape;
+      GameConfig.cellWidth = GameConfig.cellWidthLandscape;
+      GameConfig.cellHeight = GameConfig.cellHeightLandscape;
     }
 
     const activeW = GameConfig.activeWidth;
