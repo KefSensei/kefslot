@@ -10,7 +10,16 @@ declare global {
   }
 }
 
+const dbg = (msg: string) => {
+  const d = document.getElementById('loading');
+  if (d) {
+    d.style.display = 'block';
+    d.innerHTML += `<div style="color:lime;font-size:12px;text-align:left;padding:2px 20px">${msg}</div>`;
+  }
+};
+
 async function boot() {
+  dbg('boot: start');
   // Clean up previous instance (HMR)
   if (window.__kefslot_app) {
     if (window.__kefslot_resize) window.removeEventListener('resize', window.__kefslot_resize);
@@ -25,17 +34,17 @@ async function boot() {
   const app = new Application();
   window.__kefslot_app = app;
 
+  dbg('boot: app.init...');
   await app.init({
     width: GameConfig.width,
     height: GameConfig.height,
     backgroundColor: GameConfig.backgroundColor,
     antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
     resizeTo: window,
   });
-
-  // Remove loading indicator
-  const loadingEl = document.getElementById('loading');
-  if (loadingEl) loadingEl.style.display = 'none';
+  dbg('boot: app.init done');
 
   // Add canvas to DOM
   document.body.appendChild(app.canvas);
@@ -75,10 +84,6 @@ async function boot() {
     app.stage.x = (windowW - activeW * scale) / 2;
     app.stage.y = (windowH - activeH * scale) / 2;
 
-    // Update stage hitArea in local (virtual canvas) coordinates so pointer
-    // events reach children across the full active canvas — app.screen is in
-    // screen pixels which are smaller than local coords when the stage is
-    // scaled down, causing hit-test failures on the edges.
     app.stage.hitArea = new Rectangle(0, 0, activeW, activeH);
 
     // Notify game of layout change
@@ -92,17 +97,32 @@ async function boot() {
   app.stage.eventMode = 'static';
 
   // Wait for custom fonts to load before rendering any text
+  dbg('boot: fonts.ready...');
   await document.fonts.ready;
+  dbg('boot: fonts done');
 
   // Start game — await init so scenes are built before first resize
+  dbg('boot: Game.init...');
   game = new Game(app);
   await game.init();
+  dbg('boot: Game.init done');
+
+  // Remove loading indicator
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.style.display = 'none';
 
   // Initial resize after game scenes are ready
   resize();
 }
 
-boot().catch(console.error);
+boot().catch((err) => {
+  console.error(err);
+  const d = document.getElementById('err-overlay');
+  if (d) {
+    d.style.display = 'block';
+    d.textContent = 'BOOT ERROR:\n\n' + (err?.message || '') + '\n\n' + (err?.stack || String(err));
+  }
+});
 
 // HMR support
 if (import.meta.hot) {

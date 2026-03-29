@@ -9,7 +9,7 @@ A hybrid **Slot + Match-3** browser game built with PixiJS 8, TypeScript, GSAP, 
 - **Renderer:** PixiJS 8.x (WebGL)
 - **Language:** TypeScript (strict mode)
 - **Animations:** GSAP 3.x
-- **Audio:** Howler.js (music stems) + Web Audio API (procedural SFX via SFXManager)
+- **Audio:** Howler.js (music stems + file-based SFX via SFXManager)
 - **Build:** Vite 8.x with `@` path alias → `src/`
 - **Dev server:** `node node_modules/.bin/vite --port 3005` (configured in `.claude/launch.json`)
 
@@ -52,7 +52,7 @@ src/
 │   └── LevelConfig.ts      # 20 levels across 2 worlds with goals & star thresholds
 ├── audio/
 │   ├── MusicManager.ts     # Howler.js music with 10-stem progressive layering
-│   └── SFXManager.ts       # Web Audio API procedural SFX (18 sounds, lazy AudioContext)
+│   └── SFXManager.ts       # Howler.js file-based SFX (21 sounds, MP3 files in src/audio/sfx/)
 ├── core/
 │   ├── Game.ts             # Main controller (~780 lines). Manages scenes, state, spin/swap flow
 │   ├── StateMachine.ts     # FSM: MENU→LEVEL_SELECT→IDLE→SPINNING→CASCADE_RESOLVE→MATCH3_PHASE(→SPINNING)→SCORING→LEVEL_CHECK
@@ -148,13 +148,19 @@ PixiJS `Container` has a built-in `effects` property. Our effects layer is named
 - Star rating (1-3 stars)
 - Player progress persistence (localStorage)
 - 20 levels designed and configured
-- Music system (Howler.js, 10-stem progressive layering) with mute toggle
-- SFX system (Web Audio API, 18 procedural sounds) with independent mute toggle
+- Music system (Howler.js, 10-stem progressive layering) with mute toggle; respects mute state on level start
+- SFX system (Howler.js, 21 AI-generated MP3 sounds) with independent mute toggle
 - Level select with path-based nodes on AI-generated world map background
 - AI-generated menu background art (landscape + portrait variants)
 - Spin button available during MATCH3_PHASE (re-spin escape hatch)
 - Dead board detection — auto-prompts player when no valid swaps remain
 - Portrait/landscape responsive layout with orientation-aware backgrounds
+
+### Art Asset Pipeline Notes
+- **Transparent-background assets** (UI panels, sprites, overlays): use `gpt-image/1.5-text-to-image` and include `"PURE TRANSPARENT background"` + `"fully transparent alpha channel outside the [subject]"` + `"no background, no backdrop"` in the prompt. GPT-Image natively outputs RGBA PNG with alpha=0 outside the subject — no post-processing needed. Verify: corner pixels should have alpha=0.
+- **Background removal (existing opaque image)**: use `recraft/remove-background` via kie.ai — requires a public `image_urls`, not a local path. Easiest workaround is to regenerate the asset fresh with gpt-image instead.
+- **Aspect ratio for 800×700 canvas backgrounds**: Always generate at **`5:4`** aspect ratio. `5:4` produces ~1152×896 which scales to 900×700 — only 50px per side crop needed, preserving all content. **Never use `16:9`** — it produces ~1225×700 requiring 425px crop which always cuts content. When possible, request the exact output size from the model directly (e.g. `1000×700` or `800×700`) to skip cropping entirely. Always specify dimensions in the generation prompt rather than cropping after the fact.
+- **Dark preview ≠ opaque background**: GPT-Image 1.5 previews may appear dark/black in file browsers — this is just the viewer filling transparent pixels. Always verify transparency by checking corner pixel alpha values (should be 0), not visual appearance.
 
 ### Not Yet Implemented
 - Blocker tiles (ice/stone) — config exists, logic TODO

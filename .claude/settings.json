@@ -1,12 +1,22 @@
 {
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "lsof -ti:3005 > /dev/null 2>&1 || (nohup node /Users/db/repos/KefSensei/kefslot/node_modules/.bin/vite --port 3005 --host > /tmp/kefslot-vite.log 2>&1 &); echo '{\"systemMessage\": \"Dev server running at http://localhost:3005\"}'"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/eb/Documents/Projects/KefSlot && npx tsc --noEmit --pretty 2>&1 | tail -20"
+            "command": "cd /Users/db/repos/KefSensei/kefslot && npx tsc --noEmit --pretty 2>&1 | tail -20"
           }
         ]
       }

@@ -11,6 +11,7 @@ export default defineConfig({
     port: parseInt(process.env.PORT || '3000'),
     open: false,
   },
+  base: './',
   build: {
     target: 'es2020',
     outDir: 'dist',

@@ -15,3 +15,10 @@ tools/kie-mcp/node_modules/
 
 # MCP config (contains API keys)
 .mcp.json
+
+# iOS build artifacts (keep ios/ project tracked, exclude build output)
+ios/App/build/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/Pods/
+ios/App/CapApp-SPM/.build/

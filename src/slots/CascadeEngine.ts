@@ -78,9 +78,12 @@ export class CascadeEngine {
     return multipliers[Math.min(cascadeLevel, multipliers.length - 1)];
   }
 
-  // Check if two cells match (wilds match everything, blockers never match)
+  // Check if two cells match.
+  // Ice/chain/frozen blockers have a symbol underneath — they CAN match (breaking the ice).
+  // Stone/thorn blockers have no usable symbol — they CANNOT match.
   private symbolsMatch(a: CellData, b: CellData): boolean {
-    if (a.isBlocker || b.isBlocker) return false;
+    const unmatchable = (c: CellData) => c.isBlocker && (c.blockerType === 'stone' || c.blockerType === 'thorn');
+    if (unmatchable(a) || unmatchable(b)) return false;
     if (a.symbol.isWild || b.symbol.isWild) return true;
     return a.symbol.id === b.symbol.id;
   }

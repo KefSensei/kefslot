@@ -1,101 +1,146 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import { LevelIntroDef } from '@/models/Level';
 import gsap from 'gsap';
+import scrollPanelUrl from '@/assets/sprites/ui-panel-scroll.png';
+
+let texScroll: Texture | null = null;
+
+// Panel display size — matches new 420x560 scroll asset (3:4 ratio)
+const PW = 400;
+const PH = 533; // 400 * (560/420)
+
+// Inner parchment safe zone within the gold roller frame
+// Top roller ~22% of PH, bottom roller+candle ~18%  → parchment from ~117 to 436
+const INNER_W = 230;
+const TITLE_Y = -128; // just below top roller
+const DESC_Y = 10; // centre of parchment
+const BTN_Y = 155; // bottom of parchment, above candle
 
 export class LevelIntro extends Container {
   private panel = new Container();
 
-  private overlay: Graphics | null = null;
+  static async preload(): Promise<void> {
+    texScroll = await Assets.load<Texture>(scrollPanelUrl);
+  }
 
   constructor() {
     super();
     this.visible = false;
   }
 
-  /** Reposition overlay and panel for new active canvas dimensions */
   relayout(w: number, h: number): void {
-    if (this.overlay) {
-      this.overlay.clear();
-      this.overlay.rect(0, 0, w, h);
-      this.overlay.fill({ color: 0x000000, alpha: 0.7 });
-    }
     this.panel.x = w / 2;
     this.panel.y = h / 2;
   }
 
-  /** Show the intro overlay. Returns a promise that resolves when the player clicks "Let's Go!" */
   show(intro: LevelIntroDef): Promise<void> {
     return new Promise((resolve) => {
       this.removeChildren();
       this.visible = true;
 
-      // Overlay backdrop
-      this.overlay = new Graphics();
-      this.overlay.rect(0, 0, GameConfig.activeWidth, GameConfig.activeHeight);
-      this.overlay.fill({ color: 0x000000, alpha: 0.7 });
-      this.overlay.eventMode = 'static'; // block clicks behind
-      this.addChild(this.overlay);
+      const w = GameConfig.activeWidth;
+      const h = GameConfig.activeHeight;
 
-      // Panel
+      // No overlay — the game scene shows through transparently
       this.panel = new Container();
-      this.panel.x = GameConfig.activeWidth / 2;
-      this.panel.y = GameConfig.activeHeight / 2;
+      this.panel.x = w / 2;
+      this.panel.y = h / 2;
       this.addChild(this.panel);
 
-      const panelBg = new Graphics();
-      panelBg.roundRect(-200, -120, 400, 240, 20);
-      panelBg.fill({ color: 0x1e0a3a });
-      panelBg.stroke({ color: 0xf1c40f, width: 3 });
-      this.panel.addChild(panelBg);
+      // Scroll art — transparent outside the scroll shape
+      if (texScroll) {
+        const bg = new Sprite(texScroll);
+        bg.width = PW;
+        bg.height = PH;
+        bg.anchor.set(0.5);
+        this.panel.addChild(bg);
+      } else {
+        // Fallback — parchment-coloured rect
+        const bg = new Graphics();
+        bg.roundRect(-PW / 2, -PH / 2, PW, PH, 20);
+        bg.fill({ color: 0xf2e4c4 });
+        bg.stroke({ color: 0x8b6914, width: 3 });
+        this.panel.addChild(bg);
+      }
 
-      // Title
+      // ── Title ──────────────────────────────────────────────
       const title = new Text({
         text: intro.title,
         style: new TextStyle({
-          fontSize: 26,
-          fill: 0xf1c40f,
+          fontSize: 22,
+          fill: 0x2a1005,
           fontWeight: 'bold',
-          fontFamily: 'Segoe UI, sans-serif',
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontStyle: 'italic',
+          align: 'center',
+          wordWrap: true,
+          wordWrapWidth: INNER_W,
+          dropShadow: {
+            color: 0xfdf0c0,
+            distance: 0,
+            blur: 4,
+            alpha: 0.5,
+          },
         }),
       });
       title.anchor.set(0.5);
-      title.y = -70;
+      title.y = TITLE_Y;
       this.panel.addChild(title);
 
-      // Description (word-wrapped)
+      // Thin ink divider under title
+      const divider = new Graphics();
+      divider.moveTo(-INNER_W / 2, 0);
+      divider.lineTo(INNER_W / 2, 0);
+      divider.stroke({ color: 0x5a3010, width: 1, alpha: 0.35 });
+      divider.y = TITLE_Y + 18;
+      this.panel.addChild(divider);
+
+      // ── Description ───────────────────────────────────────
       const desc = new Text({
         text: intro.description,
         style: new TextStyle({
-          fontSize: 16,
-          fill: 0xd0c0e8,
-          fontFamily: 'Segoe UI, sans-serif',
+          fontSize: 15,
+          fill: 0x3a2008,
+          fontFamily: 'Georgia, "Times New Roman", serif',
           wordWrap: true,
-          wordWrapWidth: 320,
+          wordWrapWidth: INNER_W,
           align: 'center',
           lineHeight: 22,
         }),
       });
       desc.anchor.set(0.5);
-      desc.y = -5;
+      desc.y = DESC_Y;
       this.panel.addChild(desc);
 
-      // "Let's Go!" button
+      // ── "Let's Go!" — carved wood / inkwell button ────────
       const btnContainer = new Container();
-      btnContainer.y = 75;
+      btnContainer.y = BTN_Y;
+
+      const btnW = 148,
+        btnH = 40;
+
       const btnBg = new Graphics();
-      btnBg.roundRect(-80, -22, 160, 44, 22);
-      btnBg.fill({ color: 0x9b59b6 });
-      btnBg.stroke({ color: 0xf1c40f, width: 2 });
+      btnBg.roundRect(-btnW / 2, -btnH / 2, btnW, btnH, 8);
+      btnBg.fill({ color: 0x5c2800 }); // deep sienna — matches scroll wood
+      btnBg.stroke({ color: 0xd4a520, width: 2 }); // antique gold border
       btnContainer.addChild(btnBg);
+
+      // Warm inner highlight
+      const sheen = new Graphics();
+      sheen.roundRect(-btnW / 2 + 3, -btnH / 2 + 3, btnW - 6, btnH / 2 - 3, 5);
+      sheen.fill({ color: 0xffffff, alpha: 0.08 });
+      btnContainer.addChild(sheen);
 
       const btnText = new Text({
         text: "Let's Go!",
         style: new TextStyle({
-          fontSize: 20,
-          fill: 0xffffff,
+          fontSize: 17,
+          fill: 0xfdf0c0, // warm cream
           fontWeight: 'bold',
-          fontFamily: 'Segoe UI, sans-serif',
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontStyle: 'italic',
+          letterSpacing: 1,
         }),
       });
       btnText.anchor.set(0.5);
@@ -103,11 +148,11 @@ export class LevelIntro extends Container {
 
       btnContainer.eventMode = 'static';
       btnContainer.cursor = 'pointer';
+      btnContainer.on('pointerover', () => gsap.to(btnContainer.scale, { x: 1.07, y: 1.07, duration: 0.15 }));
+      btnContainer.on('pointerout', () => gsap.to(btnContainer.scale, { x: 1, y: 1, duration: 0.15 }));
       btnContainer.on('pointerdown', () => {
-        // Animate out
         const tl = gsap.timeline();
         tl.to(this.panel.scale, { x: 0, y: 0, duration: 0.25, ease: 'back.in' }, 0);
-        tl.to(this.overlay!, { alpha: 0, duration: 0.25 }, 0);
         tl.then().then(() => {
           this.visible = false;
           resolve();
@@ -115,9 +160,9 @@ export class LevelIntro extends Container {
       });
       this.panel.addChild(btnContainer);
 
-      // Animate in
+      // ── Animate in ────────────────────────────────────────
       this.panel.scale.set(0);
-      gsap.to(this.panel.scale, { x: 1, y: 1, duration: 0.4, ease: 'back.out' });
+      gsap.to(this.panel.scale, { x: 1, y: 1, duration: 0.45, ease: 'back.out(1.4)' });
     });
   }
 }

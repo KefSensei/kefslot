@@ -12,6 +12,9 @@ export interface PlayerData {
 
 const STORAGE_KEY = 'roxy_magic_reels_save';
 
+/** ?unlock=all in URL → every level is accessible for testing */
+const UNLOCK_ALL = typeof location !== 'undefined' && new URLSearchParams(location.search).get('unlock') === 'all';
+
 export class PlayerState {
   data: PlayerData;
 
@@ -51,6 +54,7 @@ export class PlayerState {
   }
 
   isLevelUnlocked(levelId: number): boolean {
+    if (UNLOCK_ALL) return true;
     return levelId <= this.data.currentLevel;
   }
 
