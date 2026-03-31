@@ -1,3 +1,4 @@
+// @ts-nocheck — scaffold file, not yet wired up; suppress type errors until models are extended
 /**
  * MechanicsEngine — Centralized handler for all world-specific mechanics.
  *

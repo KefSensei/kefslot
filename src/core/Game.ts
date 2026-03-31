@@ -146,7 +146,7 @@ export class Game {
       try {
         results.push(await Assets.load<Texture>(url));
       } catch (e) {
-        throw new Error(`Failed to load texture: ${url} — ${e}`, { cause: e });
+        throw new Error(`Failed to load texture: ${url} — ${e}`);
       }
     }
     const [menuL, menuP, lsL, lsP, gameL, gameP] = results;
@@ -265,6 +265,7 @@ export class Game {
 
   /** Reposition all game elements for portrait or landscape layout */
   relayout(isPortrait: boolean): void {
+    if (!this.gameBgTextures) return;
     if (this._isPortrait === isPortrait) return;
     this._isPortrait = isPortrait;
 
