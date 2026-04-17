@@ -146,8 +146,9 @@ async function boot() {
 
   // Start game — await init so scenes are built before first resize
   dbg('boot: Game.init...');
-  game = new Game(app);
-  await game.init();
+  const _g = new Game(app);
+  await _g.init();
+  game = _g;
   dbg('boot: Game.init done');
 
   // Remove loading indicator

@@ -267,6 +267,7 @@ export class Game {
 
   /** Reposition all game elements for portrait or landscape layout */
   relayout(isPortrait: boolean): void {
+    if (!this.gameBgTextures) return;
     if (this._isPortrait === isPortrait) return;
     this._isPortrait = isPortrait;
 
