@@ -19,12 +19,23 @@ export class MenuScreen extends Container {
   private playBtnShimmer!: Graphics;
   private playBtnText!: Text;
 
+  // Audio toggles
+  private audioControls!: Container;
+  private musicBtn!: Container;
+  private musicBtnIcon!: Graphics;
+  private sfxBtn!: Container;
+  private sfxBtnIcon!: Graphics;
+  private _musicMuted = false;
+  private _sfxMuted = false;
+
   // State
   private entrancePlayed = false;
   private idleAnimationsStarted = false;
 
-  // Callback
+  // Callbacks
   onPlay: (() => void) | null = null;
+  onMusicToggle: ((muted: boolean) => void) | null = null;
+  onSfxToggle: ((muted: boolean) => void) | null = null;
 
   constructor(bgTextures: { landscape: Texture; portrait: Texture }) {
     super();
@@ -42,6 +53,9 @@ export class MenuScreen extends Container {
 
     // Play button
     this.buildPlayButton(w, h, isPortrait);
+
+    // Audio toggle buttons
+    this.buildAudioControls(w);
   }
 
   // --- Build methods ---
@@ -159,6 +173,96 @@ export class MenuScreen extends Container {
     this.addChild(this.playBtn);
   }
 
+  private buildAudioControls(w: number): void {
+    this.audioControls = new Container();
+
+    // Music button (top-right)
+    this.musicBtn = new Container();
+    this.musicBtn.x = w - 30;
+    this.musicBtn.y = 30;
+    this.musicBtn.eventMode = 'static';
+    this.musicBtn.cursor = 'pointer';
+    this.musicBtn.hitArea = { contains: (x: number, y: number) => x >= -16 && x <= 16 && y >= -16 && y <= 16 };
+    this.musicBtnIcon = new Graphics();
+    this.musicBtn.addChild(this.musicBtnIcon);
+    this.drawMusicIcon(false);
+    this.musicBtn.on('pointerdown', () => {
+      this._musicMuted = !this._musicMuted;
+      this.drawMusicIcon(this._musicMuted);
+      this.onMusicToggle?.(this._musicMuted);
+    });
+    this.audioControls.addChild(this.musicBtn);
+
+    // SFX button (left of music)
+    this.sfxBtn = new Container();
+    this.sfxBtn.x = w - 70;
+    this.sfxBtn.y = 30;
+    this.sfxBtn.eventMode = 'static';
+    this.sfxBtn.cursor = 'pointer';
+    this.sfxBtn.hitArea = { contains: (x: number, y: number) => x >= -16 && x <= 16 && y >= -16 && y <= 16 };
+    this.sfxBtnIcon = new Graphics();
+    this.sfxBtn.addChild(this.sfxBtnIcon);
+    this.drawSfxIcon(false);
+    this.sfxBtn.on('pointerdown', () => {
+      this._sfxMuted = !this._sfxMuted;
+      this.drawSfxIcon(this._sfxMuted);
+      this.onSfxToggle?.(this._sfxMuted);
+    });
+    this.audioControls.addChild(this.sfxBtn);
+
+    this.addChild(this.audioControls);
+  }
+
+  private drawMusicIcon(muted: boolean): void {
+    const g = this.musicBtnIcon;
+    g.clear();
+    g.moveTo(-6, -4);
+    g.lineTo(-2, -4);
+    g.lineTo(4, -9);
+    g.lineTo(4, 9);
+    g.lineTo(-2, 4);
+    g.lineTo(-6, 4);
+    g.closePath();
+    g.fill({ color: 0xb0a0c0 });
+    if (muted) {
+      g.moveTo(7, -5);
+      g.lineTo(13, 5);
+      g.stroke({ color: 0xe74c3c, width: 2 });
+      g.moveTo(13, -5);
+      g.lineTo(7, 5);
+      g.stroke({ color: 0xe74c3c, width: 2 });
+    } else {
+      g.arc(4, 0, 7, -Math.PI / 3, Math.PI / 3);
+      g.stroke({ color: 0xb0a0c0, width: 1.5 });
+      g.arc(4, 0, 11, -Math.PI / 3, Math.PI / 3);
+      g.stroke({ color: 0xb0a0c0, width: 1.5 });
+    }
+  }
+
+  private drawSfxIcon(muted: boolean): void {
+    const g = this.sfxBtnIcon;
+    g.clear();
+    const color = muted ? 0x666666 : 0xb0a0c0;
+    g.moveTo(-8, -6); g.lineTo(-8, 6);   g.stroke({ color, width: 2 });
+    g.moveTo(-8, -6); g.lineTo(-2, -6);  g.stroke({ color, width: 2 });
+    g.moveTo(-8, 0);  g.lineTo(-3, 0);   g.stroke({ color, width: 2 });
+    g.moveTo(1, -6);  g.lineTo(9, 6);    g.stroke({ color, width: 2 });
+    g.moveTo(9, -6);  g.lineTo(1, 6);    g.stroke({ color, width: 2 });
+    if (muted) {
+      g.moveTo(-10, 8); g.lineTo(11, -8); g.stroke({ color: 0xe74c3c, width: 2 });
+    }
+  }
+
+  setMusicMuted(muted: boolean): void {
+    this._musicMuted = muted;
+    this.drawMusicIcon(muted);
+  }
+
+  setSfxMuted(muted: boolean): void {
+    this._sfxMuted = muted;
+    this.drawSfxIcon(muted);
+  }
+
   // --- Entrance animation ---
 
   async playEntrance(): Promise<void> {
@@ -167,6 +271,9 @@ export class MenuScreen extends Container {
 
     // Background fades in
     this.bg.alpha = 0;
+
+    // Audio controls fade in with background
+    this.audioControls.alpha = 0;
 
     // Button starts hidden below
     this.playBtn.alpha = 0;
@@ -177,8 +284,9 @@ export class MenuScreen extends Container {
 
     const tl = gsap.timeline();
 
-    // Background fade in
+    // Background + audio controls fade in
     tl.to(this.bg, { alpha: 1, duration: isFirstTime ? 0.6 : 0.3 }, 0);
+    tl.to(this.audioControls, { alpha: 1, duration: isFirstTime ? 0.6 : 0.3 }, 0);
 
     // Play button bounces in
     tl.to(
@@ -249,5 +357,9 @@ export class MenuScreen extends Container {
     // Play button
     this.playBtn.x = w / 2;
     this.playBtn.y = isPortrait ? h * 0.88 : h * 0.85;
+
+    // Audio controls — anchor to top-right
+    this.musicBtn.x = w - 30;
+    this.sfxBtn.x = w - 70;
   }
 }

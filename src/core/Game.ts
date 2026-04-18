@@ -182,11 +182,21 @@ export class Game {
 
   private buildMenuScene(): void {
     this.menuScreen = new MenuScreen(this.menuBgTextures);
+
     this.menuScreen.onPlay = () => {
       this.sfx.play('buttonPress');
-      this.music.load();
       this.fsm.transition('LEVEL_SELECT');
     };
+
+    this.menuScreen.onMusicToggle = (muted) => {
+      this.player.setMusicMuted(muted);
+      this.music.setMuted(muted);
+    };
+
+    this.menuScreen.onSfxToggle = (muted) => {
+      this.sfx.setMuted(muted);
+    };
+
     this.app.stage.addChild(this.menuScreen);
   }
 
@@ -313,6 +323,13 @@ export class Game {
     this.gameScene.visible = scene === 'game';
 
     if (scene === 'menu') {
+      // Sync audio toggle state with saved prefs
+      this.menuScreen.setMusicMuted(this.player.musicMuted);
+      this.menuScreen.setSfxMuted(this.sfx.muted);
+      // Start menu music (load is idempotent; respects mute state)
+      this.music.load();
+      this.music.setMuted(this.player.musicMuted);
+      if (!this.player.musicMuted) this.music.start();
       this.menuScreen.playEntrance();
     }
     if (scene === 'levelSelect') {
