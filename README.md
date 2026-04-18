@@ -210,4 +210,61 @@ Core gameplay loop is functional end-to-end. See the [wiki](https://github.com/K
 
 ---
 
+---
+
+## Claude Code Setup
+
+This repo ships with Claude Code automations in `.claude/` — skills, hooks, and an AI art MCP.
+
+### Skills (slash commands)
+
+Nine skills are available when working in this repo:
+
+| Command | What it does |
+|---------|-------------|
+| `/dev` | Start the Vite dev server on port 3005 |
+| `/build` | Type-check + production build |
+| `/pr` | Full git workflow — lint, type-check, commit, push, open PR |
+| `/mobile-preview` | Build + cap sync → open Xcode or Android Studio |
+| `/sync-claude-md` | Audit CLAUDE.md against disk and update it |
+| `/new-mechanic` | Scaffold a new mechanic in `MechanicsEngine.ts` |
+| `/art-asset` | Generate AI art via kie.ai, process images, check credits |
+| `/test-setup` | Scaffold vitest for the project |
+| `/test-run` | Run vitest suite and interpret results |
+
+To make these available **globally in all repos**, copy `.claude/skills/` to `~/.claude/skills/`.
+
+### kie-art MCP (AI art generation)
+
+The kie-art MCP server lives in `tools/kie-mcp/server.mjs` and is registered for this project via `.mcp.json`.
+
+**Setup — set your API key:**
+
+Add to `~/.claude/settings.local.json` (gitignored, never committed):
+```json
+{
+  "env": {
+    "KIE_API_KEY": "your-key-here"
+  }
+}
+```
+Or add `export KIE_API_KEY=your-key-here` to your shell profile (`~/.zshrc` / `~/.bashrc`).
+
+Get a key at [kie.ai](https://kie.ai).
+
+**To use kie-art in other repos globally**, add to `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "kie-art": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/Users/db/repos/KefSensei/kefslot/tools/kie-mcp/server.mjs"]
+    }
+  }
+}
+```
+
+---
+
 *© KefSensei. All rights reserved.*
