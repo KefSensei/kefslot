@@ -14,7 +14,7 @@ import levelCompleteUrl from '@/audio/sfx/sfx-level-complete.mp3';
 import levelFailedUrl from '@/audio/sfx/sfx-level-failed.mp3';
 import levelIntroUrl from '@/audio/sfx/sfx-level-intro.mp3';
 import match3Url from '@/audio/sfx/sfx-match3.mp3';
-import match4Url from '@/audio/sfx/sfx-match4.mp3';
+import matchClearUrl from '@/audio/sfx/sfx-match-clear.mp3';
 import match5Url from '@/audio/sfx/sfx-match5.mp3';
 import multiplierUrl from '@/audio/sfx/sfx-multiplier.mp3';
 import powerupActivateUrl from '@/audio/sfx/sfx-powerup-activate.mp3';
@@ -32,7 +32,7 @@ export type SFXName =
   | 'swap'
   | 'invalidSwap'
   | 'match3'
-  | 'match4'
+  | 'match4'  // routed to match3Url +1.2× pitch — sfx-match4.mp3 was too electronic
   | 'match5'
   | 'cascade'
   | 'multiplier'
@@ -46,7 +46,8 @@ export type SFXName =
   | 'levelIntro'
   | 'powerUpActivate'
   | 'blockerCrack'
-  | 'blockerBreak';
+  | 'blockerBreak'
+  | 'matchClear';
 
 export interface SFXOptions {
   pitch?: number;
@@ -68,7 +69,7 @@ const sfx: Record<SFXName, Howl> = {
   swap: howl(swapUrl, 0.45),
   invalidSwap: howl(invalidSwapUrl, 0.5),
   match3: howl(match3Url, 0.7),
-  match4: howl(match4Url, 0.75),
+  match4: howl(match3Url, 0.75),  // warm tone, pitched up in play() — sfx-match4 was too electronic
   match5: howl(match5Url, 0.8),
   cascade: howl(cascadeBurstUrl, 0.65),
   multiplier: howl(multiplierUrl, 0.55),
@@ -83,6 +84,7 @@ const sfx: Record<SFXName, Howl> = {
   powerUpActivate: howl(powerupActivateUrl, 0.75),
   blockerCrack: howl(blockerCrackUrl, 0.55),
   blockerBreak: howl(blockerBreakUrl, 0.65),
+  matchClear: howl(matchClearUrl, 0.5),  // previously unused sfx-match-clear.mp3
 };
 
 export class SFXManager {
@@ -99,9 +101,12 @@ export class SFXManager {
     const h = sfx[name];
 
     // cascade pitch rises with level; star pitch rises with star index
+    // match4/5 are pitched-up versions of the warm match3 source for escalating feel
     let rate = 1;
     if (name === 'cascade') rate = 1 + (opts.cascadeLevel ?? 0) * 0.1;
     if (name === 'starEarned') rate = 1 + (opts.starIndex ?? 0) * 0.18;
+    if (name === 'match4') rate = 1.2;
+    if (name === 'match5') rate = 1.1;
 
     const id = h.play();
     if (rate !== 1) h.rate(rate, id);
