@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Roxy\'s Magic Reels</string>
-    <string name="title_activity_main">Roxy\'s Magic Reels</string>
-    <string name="package_name">com.ebizmarts.kefroxy</string>
-    <string name="custom_url_scheme">com.ebizmarts.kefroxy</string>
-</resources>
