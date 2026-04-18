@@ -1,5 +1,7 @@
-import { Container, Graphics, Text, TextStyle, FillGradient, Sprite, Texture, Rectangle } from 'pixi.js';
+import { Container, Graphics, Text, FillGradient, Sprite, Texture, Rectangle } from 'pixi.js';
+import { tsButton } from '@/config/Typography';
 import { GameConfig } from '@/config/GameConfig';
+import { coverSprite } from '@/utils/MathUtils';
 import gsap from 'gsap';
 
 /** Menu screen — AI-generated background + interactive PLAY button */
@@ -32,10 +34,10 @@ export class MenuScreen extends Container {
     const h = GameConfig.activeHeight;
     const isPortrait = GameConfig.isPortrait;
 
-    // Background image (title + Roxy baked in)
+    // Background image — cover-scaled to fill full physical screen
     this.bg = new Sprite(isPortrait ? bgTextures.portrait : bgTextures.landscape);
-    this.bg.width = w;
-    this.bg.height = h;
+    const { x: bgX, y: bgY, w: bgW, h: bgH } = GameConfig.bgBounds;
+    coverSprite(this.bg, bgX, bgY, bgW, bgH);
     this.addChild(this.bg);
 
     // Play button
@@ -121,22 +123,7 @@ export class MenuScreen extends Container {
     this.playBtnShimmer.mask = shimmerMask;
 
     // Button text
-    this.playBtnText = new Text({
-      text: 'PLAY',
-      style: new TextStyle({
-        fontSize: 28,
-        fill: 0xffffff,
-        fontWeight: 'bold',
-        fontFamily: "'Cinzel', serif",
-        letterSpacing: 8,
-        dropShadow: {
-          color: 0x000000,
-          distance: 1,
-          blur: 3,
-          alpha: 0.4,
-        },
-      }),
-    });
+    this.playBtnText = new Text({ text: 'PLAY', style: tsButton });
     this.playBtnText.anchor.set(0.5);
     this.playBtn.addChild(this.playBtnText);
 
@@ -254,10 +241,10 @@ export class MenuScreen extends Container {
     const w = GameConfig.activeWidth;
     const h = GameConfig.activeHeight;
 
-    // Background
+    // Background — re-cover-scale for new orientation
     this.bg.texture = isPortrait ? this.bgTextures.portrait : this.bgTextures.landscape;
-    this.bg.width = w;
-    this.bg.height = h;
+    const { x: bgX, y: bgY, w: bgW, h: bgH } = GameConfig.bgBounds;
+    coverSprite(this.bg, bgX, bgY, bgW, bgH);
 
     // Play button
     this.playBtn.x = w / 2;

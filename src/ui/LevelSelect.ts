@@ -1,5 +1,7 @@
 import { Container, Graphics, Text, TextStyle, Sprite, Texture, FederatedPointerEvent } from 'pixi.js';
+import { tsWorldTitle, tsLevelNumber, tsLevelNumberBoss, tsMapStars, tsWorldNav } from '@/config/Typography';
 import { GameConfig } from '@/config/GameConfig';
+import { coverSprite } from '@/utils/MathUtils';
 import { LevelConfigs } from '@/config/LevelConfig';
 import { PlayerState } from '@/models/PlayerState';
 
@@ -155,8 +157,8 @@ export class LevelSelect extends Container {
 
     if (bgTex) {
       const bg = new Sprite(bgTex);
-      bg.width = w;
-      bg.height = h;
+      const { x: bgX, y: bgY, w: bgW, h: bgH } = GameConfig.bgBounds;
+      coverSprite(bg, bgX, bgY, bgW, bgH);
       this.addChild(bg);
 
       const overlay = new Graphics();
@@ -202,17 +204,10 @@ export class LevelSelect extends Container {
     this.drawPathLine(path, w, h);
 
     // World title
-    const titleLabel = new Text({
-      text: `World ${world.id}: ${world.name}`,
-      style: new TextStyle({
-        fontSize: isPortrait ? 18 : 22,
-        fill: worldColor,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        letterSpacing: 2,
-        dropShadow: { color: 0x000000, distance: 2, alpha: 0.9 },
-      }),
-    });
+    const worldTitleStyle = tsWorldTitle.clone();
+    worldTitleStyle.fill = worldColor;
+    worldTitleStyle.fontSize = isPortrait ? 18 : 22;
+    const titleLabel = new Text({ text: `World ${world.id}: ${world.name}`, style: worldTitleStyle });
     titleLabel.anchor.set(0.5, 0);
     titleLabel.x = w / 2;
     titleLabel.y = isPortrait ? h * 0.02 : h * 0.01;
@@ -263,13 +258,7 @@ export class LevelSelect extends Container {
       if (unlocked) {
         const numText = new Text({
           text: String(level.id),
-          style: new TextStyle({
-            fontSize: isBoss ? 22 : 17,
-            fill: isBoss ? 0xf1c40f : 0xffffff,
-            fontWeight: 'bold',
-            fontFamily: 'Segoe UI, sans-serif',
-            dropShadow: { color: 0x000000, distance: 2, alpha: 0.8 },
-          }),
+          style: isBoss ? tsLevelNumberBoss : tsLevelNumber,
         });
         numText.anchor.set(0.5);
         numText.y = stars > 0 ? -5 : 0;
@@ -278,7 +267,7 @@ export class LevelSelect extends Container {
         if (stars > 0) {
           const starsText = new Text({
             text: '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars),
-            style: new TextStyle({ fontSize: 11, fill: 0xf1c40f, fontFamily: 'Segoe UI, sans-serif' }),
+            style: tsMapStars,
           });
           starsText.anchor.set(0.5);
           starsText.y = 9;
@@ -343,14 +332,7 @@ export class LevelSelect extends Container {
       this.addChild(prevBtn);
 
       // Previous world name
-      const prevName = new Text({
-        text: WORLDS[this.currentWorld - 1].name,
-        style: new TextStyle({
-          fontSize: 11,
-          fill: 0xb0a0c0,
-          fontFamily: 'Segoe UI, sans-serif',
-        }),
-      });
+      const prevName = new Text({ text: WORLDS[this.currentWorld - 1].name, style: tsWorldNav });
       prevName.anchor.set(0.5);
       prevName.x = prevBtn.x;
       prevName.y = y - btnSize / 2 - 8;
@@ -392,14 +374,9 @@ export class LevelSelect extends Container {
       this.addChild(nextBtn);
 
       // Next world name
-      const nextName = new Text({
-        text: WORLDS[this.currentWorld + 1].name,
-        style: new TextStyle({
-          fontSize: 11,
-          fill: nextUnlocked ? 0xb0a0c0 : 0x555555,
-          fontFamily: 'Segoe UI, sans-serif',
-        }),
-      });
+      const nextNameStyle = tsWorldNav.clone();
+      nextNameStyle.fill = nextUnlocked ? 0xb0a0c0 : 0x555555;
+      const nextName = new Text({ text: WORLDS[this.currentWorld + 1].name, style: nextNameStyle });
       nextName.anchor.set(0.5);
       nextName.x = nextBtn.x;
       nextName.y = y - btnSize / 2 - 8;

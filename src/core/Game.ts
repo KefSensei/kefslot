@@ -57,7 +57,7 @@ import { LevelSelect } from '@/ui/LevelSelect';
 import { LevelComplete } from '@/ui/LevelComplete';
 import { LevelIntro } from '@/ui/LevelIntro';
 import { MenuScreen } from '@/ui/MenuScreen';
-import { delay, weightedRandom } from '@/utils/MathUtils';
+import { delay, weightedRandom, coverSprite } from '@/utils/MathUtils';
 import { getSymbolsForLevel } from '@/config/SymbolConfig';
 import { CellData, createCell, PowerUpType } from '@/models/Symbol';
 import gsap from 'gsap';
@@ -207,10 +207,10 @@ export class Game {
     const h = GameConfig.activeHeight;
     const isPortrait = GameConfig.isPortrait;
 
-    // Background image (slot cabinet art)
+    // Background image — cover-scaled to fill full physical screen (no black bars)
     this.gameBg = new Sprite(isPortrait ? this.gameBgTextures.portrait : this.gameBgTextures.landscape);
-    this.gameBg.width = w;
-    this.gameBg.height = h;
+    const { x: bgX, y: bgY, w: bgW, h: bgH } = GameConfig.bgBounds;
+    coverSprite(this.gameBg, bgX, bgY, bgW, bgH);
     this.gameScene.addChild(this.gameBg);
 
     // Keep these for compatibility but make them invisible (art provides the atmosphere now)
@@ -274,10 +274,10 @@ export class Game {
     const w = GameConfig.activeWidth;
     const h = GameConfig.activeHeight;
 
-    // Swap game background texture for orientation
+    // Swap game background texture and re-cover-scale to fill full screen
     this.gameBg.texture = isPortrait ? this.gameBgTextures.portrait : this.gameBgTextures.landscape;
-    this.gameBg.width = w;
-    this.gameBg.height = h;
+    const { x: bgX, y: bgY, w: bgW, h: bgH } = GameConfig.bgBounds;
+    coverSprite(this.gameBg, bgX, bgY, bgW, bgH);
 
     // Grid — position to match cabinet screen area
     const gridCenter = isPortrait ? GameConfig.gridCenterPortrait : GameConfig.gridCenterLandscape;

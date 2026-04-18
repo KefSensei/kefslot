@@ -1,6 +1,15 @@
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 import { GameConfig } from '@/config/GameConfig';
 import gsap from 'gsap';
+import {
+  tsLabel,
+  tsHudValue,
+  tsHudValueBig,
+  tsMultiplier,
+  tsCoins,
+  tsMechanicBar,
+  tsHudMessage,
+} from '@/config/Typography';
 
 export interface GoalStatus {
   label: string;
@@ -44,26 +53,6 @@ export class HUD extends Container {
   constructor() {
     super();
 
-    const labelStyle = new TextStyle({
-      fontSize: 12,
-      fill: 0xb0a0c0,
-      fontFamily: 'monospace',
-      letterSpacing: 1,
-    });
-
-    const valueStyle = new TextStyle({
-      fontSize: 22,
-      fill: 0xffffff,
-      fontWeight: 'bold',
-      fontFamily: 'monospace',
-    });
-
-    const bigValueStyle = new TextStyle({
-      fontSize: 28,
-      fill: 0xf1c40f,
-      fontWeight: 'bold',
-      fontFamily: 'monospace',
-    });
 
     // Background bar
     this.bg = new Graphics();
@@ -78,31 +67,31 @@ export class HUD extends Container {
     this.addChild(this.accentLine);
 
     // Level
-    this.lvlLabel = new Text({ text: 'LEVEL', style: labelStyle });
+    this.lvlLabel = new Text({ text: 'LEVEL', style: tsLabel });
     this.lvlLabel.x = 20;
     this.lvlLabel.y = 6;
     this.addChild(this.lvlLabel);
-    this.levelText = new Text({ text: '1', style: valueStyle });
+    this.levelText = new Text({ text: '1', style: tsHudValue });
     this.levelText.x = 20;
     this.levelText.y = 24;
     this.addChild(this.levelText);
 
     // Score
-    this.scoreLabel = new Text({ text: 'SCORE', style: labelStyle });
+    this.scoreLabel = new Text({ text: 'SCORE', style: tsLabel });
     this.scoreLabel.x = 120;
     this.scoreLabel.y = 6;
     this.addChild(this.scoreLabel);
-    this.scoreText = new Text({ text: '0', style: bigValueStyle });
+    this.scoreText = new Text({ text: '0', style: tsHudValueBig });
     this.scoreText.x = 120;
     this.scoreText.y = 22;
     this.addChild(this.scoreText);
 
     // Moves
-    this.movesLabel = new Text({ text: 'MOVES', style: labelStyle });
+    this.movesLabel = new Text({ text: 'MOVES', style: tsLabel });
     this.movesLabel.x = 350;
     this.movesLabel.y = 6;
     this.addChild(this.movesLabel);
-    this.movesText = new Text({ text: '5', style: valueStyle });
+    this.movesText = new Text({ text: '5', style: tsHudValue });
     this.movesText.x = 350;
     this.movesText.y = 24;
     this.addChild(this.movesText);
@@ -114,25 +103,17 @@ export class HUD extends Container {
     this.addChild(this.movesGlow);
 
     // Multiplier
-    this.multLabel = new Text({ text: 'MULTI', style: labelStyle });
+    this.multLabel = new Text({ text: 'MULTI', style: tsLabel });
     this.multLabel.x = 480;
     this.multLabel.y = 6;
     this.addChild(this.multLabel);
-    this.multiplierText = new Text({
-      text: 'x1',
-      style: new TextStyle({
-        fontSize: 24,
-        fill: 0xff6b6b,
-        fontWeight: 'bold',
-        fontFamily: 'monospace',
-      }),
-    });
+    this.multiplierText = new Text({ text: 'x1', style: tsMultiplier });
     this.multiplierText.x = 480;
     this.multiplierText.y = 22;
     this.addChild(this.multiplierText);
 
     // Coins with icon
-    this.coinsLabel = new Text({ text: 'COINS', style: labelStyle });
+    this.coinsLabel = new Text({ text: 'COINS', style: tsLabel });
     this.coinsLabel.x = 640;
     this.coinsLabel.y = 6;
     this.addChild(this.coinsLabel);
@@ -142,24 +123,13 @@ export class HUD extends Container {
     this.coinIcon.fill({ color: 0xd4af37 });
     this.coinIcon.stroke({ color: 0xf5d060, width: 1.5 });
     this.addChild(this.coinIcon);
-    this.coinC = new Text({
-      text: 'C',
-      style: new TextStyle({ fontSize: 11, fill: 0x8b7332, fontWeight: 'bold', fontFamily: 'monospace' }),
-    });
+    this.coinC = new Text({ text: '✦', style: tsMechanicBar });
     this.coinC.anchor.set(0.5);
     this.coinC.x = 630;
     this.coinC.y = 36;
     this.addChild(this.coinC);
 
-    this.coinsText = new Text({
-      text: '1000',
-      style: new TextStyle({
-        fontSize: 20,
-        fill: 0xf39c12,
-        fontWeight: 'bold',
-        fontFamily: 'monospace',
-      }),
-    });
+    this.coinsText = new Text({ text: '1000', style: tsCoins });
     this.coinsText.x = 650;
     this.coinsText.y = 24;
     this.addChild(this.coinsText);
@@ -208,15 +178,7 @@ export class HUD extends Container {
     this.mechanicBar.visible = false;
     this.addChild(this.mechanicBar);
 
-    this.mechanicText = new Text({
-      text: '',
-      style: new TextStyle({
-        fontSize: 11,
-        fill: 0xccbbdd,
-        fontFamily: 'monospace',
-        letterSpacing: 1,
-      }),
-    });
+    this.mechanicText = new Text({ text: '', style: tsMechanicBar });
     this.mechanicText.x = 10;
     this.mechanicText.y = 2;
     this.mechanicBar.addChild(this.mechanicText);
@@ -227,22 +189,7 @@ export class HUD extends Container {
     this.addChild(this.goalsBar);
 
     // Message (centered on slot grid)
-    this.messageText = new Text({
-      text: '',
-      style: new TextStyle({
-        fontSize: 36,
-        fill: 0xf1c40f,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        stroke: { color: 0x000000, width: 6 },
-        dropShadow: {
-          color: 0x000000,
-          distance: 3,
-          blur: 8,
-          alpha: 1,
-        },
-      }),
-    });
+    this.messageText = new Text({ text: '', style: tsHudMessage });
     this.messageText.anchor.set(0.5);
     this.messageText.x = GameConfig.width / 2;
     this.messageText.y = GameConfig.height / 2 - 20;
@@ -419,20 +366,12 @@ export class HUD extends Container {
     const centerX = w / 2;
 
     // First pass: build texts to measure total width
-    const texts = allGoals.map(
-      (g) =>
-        new Text({
-          text: (g.done ? '✓  ' : '') + g.label,
-          style: new TextStyle({
-            fontSize: 13,
-            fill: g.done ? 0x2ecc71 : 0xf0e0ff,
-            fontWeight: 'bold',
-            fontFamily: 'monospace',
-            letterSpacing: 1,
-            dropShadow: g.done ? undefined : { color: 0x000000, distance: 1, alpha: 0.8 },
-          }),
-        }),
-    );
+    const texts = allGoals.map((g) => {
+      const style = tsLabel.clone();
+      style.fill = g.done ? 0x4ade80 : 0xf0e0ff;
+      style.fontSize = 13;
+      return new Text({ text: (g.done ? '✓  ' : '') + g.label, style });
+    });
 
     const gapW = 28;
     const totalW = texts.reduce((s, t, i) => s + t.width + (i < texts.length - 1 ? gapW : 0), 0);

@@ -1,4 +1,5 @@
-import { Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { tsLevelTitle, tsLevelDesc, tsButtonSecondary } from '@/config/Typography';
 import { GameConfig } from '@/config/GameConfig';
 import { LevelIntroDef } from '@/models/Level';
 import gsap from 'gsap';
@@ -65,25 +66,7 @@ export class LevelIntro extends Container {
       }
 
       // ── Title ──────────────────────────────────────────────
-      const title = new Text({
-        text: intro.title,
-        style: new TextStyle({
-          fontSize: 22,
-          fill: 0x2a1005,
-          fontWeight: 'bold',
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontStyle: 'italic',
-          align: 'center',
-          wordWrap: true,
-          wordWrapWidth: INNER_W,
-          dropShadow: {
-            color: 0xfdf0c0,
-            distance: 0,
-            blur: 4,
-            alpha: 0.5,
-          },
-        }),
-      });
+      const title = new Text({ text: intro.title, style: tsLevelTitle });
       title.anchor.set(0.5);
       title.y = TITLE_Y;
       this.panel.addChild(title);
@@ -97,18 +80,7 @@ export class LevelIntro extends Container {
       this.panel.addChild(divider);
 
       // ── Description ───────────────────────────────────────
-      const desc = new Text({
-        text: intro.description,
-        style: new TextStyle({
-          fontSize: 15,
-          fill: 0x3a2008,
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          wordWrap: true,
-          wordWrapWidth: INNER_W,
-          align: 'center',
-          lineHeight: 22,
-        }),
-      });
+      const desc = new Text({ text: intro.description, style: tsLevelDesc });
       desc.anchor.set(0.5);
       desc.y = DESC_Y;
       this.panel.addChild(desc);
@@ -132,17 +104,7 @@ export class LevelIntro extends Container {
       sheen.fill({ color: 0xffffff, alpha: 0.08 });
       btnContainer.addChild(sheen);
 
-      const btnText = new Text({
-        text: "Let's Go!",
-        style: new TextStyle({
-          fontSize: 17,
-          fill: 0xfdf0c0, // warm cream
-          fontWeight: 'bold',
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontStyle: 'italic',
-          letterSpacing: 1,
-        }),
-      });
+      const btnText = new Text({ text: "Let's Go!", style: tsButtonSecondary });
       btnText.anchor.set(0.5);
       btnContainer.addChild(btnText);
 

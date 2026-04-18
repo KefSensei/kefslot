@@ -1,5 +1,6 @@
-import { Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import gsap from 'gsap';
+import { tsFloating, tsCascadeBurst } from '@/config/Typography';
 import { getPowerUpActivateTexture } from '@/slots/SlotGrid';
 
 import confetti1Url from '@/assets/sprites/particle-confetti-1.png';
@@ -147,21 +148,9 @@ export class MatchEffects extends Container {
 
   /** Show a floating score number rising from a position */
   showFloatingScore(x: number, y: number, score: number, color = 0xf1c40f): void {
-    const text = new Text({
-      text: `+${score}`,
-      style: new TextStyle({
-        fontSize: 34,
-        fill: color,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        stroke: { color: 0x000000, width: 4 },
-        dropShadow: {
-          color: 0x000000,
-          distance: 2,
-          alpha: 0.6,
-        },
-      }),
-    });
+    const floatStyle = tsFloating.clone();
+    floatStyle.fill = color;
+    const text = new Text({ text: `+${score}`, style: floatStyle });
     text.anchor.set(0.5);
     text.x = x;
     text.y = y;
@@ -209,16 +198,7 @@ export class MatchEffects extends Container {
     gsap.to(ring, { alpha: 0, duration: 0.5, ease: 'power2.out', onComplete: () => ring.destroy() });
 
     // Multiplier text
-    const text = new Text({
-      text: `x${multiplier}`,
-      style: new TextStyle({
-        fontSize: 40,
-        fill: 0xff5722,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        stroke: { color: 0xffffff, width: 4 },
-      }),
-    });
+    const text = new Text({ text: `x${multiplier}`, style: tsCascadeBurst });
     text.anchor.set(0.5);
     text.x = x;
     text.y = y;

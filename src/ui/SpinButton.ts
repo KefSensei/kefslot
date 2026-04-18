@@ -1,5 +1,6 @@
-import { Container, Graphics, Text, TextStyle, Rectangle } from 'pixi.js';
+import { Container, Graphics, Text, Rectangle } from 'pixi.js';
 import gsap from 'gsap';
+import { tsButton } from '@/config/Typography';
 
 export class SpinButton extends Container {
   private bg: Graphics;
@@ -37,16 +38,7 @@ export class SpinButton extends Container {
     this.gloss.fill({ color: 0xffffff, alpha: 0.12 });
     this.addChild(this.gloss);
 
-    this.btnLabel = new Text({
-      text: 'SPIN',
-      style: new TextStyle({
-        fontSize: 24,
-        fill: 0xffffff,
-        fontWeight: 'bold',
-        fontFamily: 'Segoe UI, sans-serif',
-        letterSpacing: 4,
-      }),
-    });
+    this.btnLabel = new Text({ text: 'SPIN', style: tsButton });
     this.btnLabel.anchor.set(0.5);
     this.addChild(this.btnLabel);
 

@@ -1,4 +1,5 @@
-import { Assets, Container, Graphics, Sprite, Text, TextStyle, Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { tsVictoryHeadline, tsFailureHeadline, tsLabel, tsScoreDisplay, tsScoreLabel, tsCoinEarned, tsResultButton, tsGoalLabel } from '@/config/Typography';
 import { GameConfig } from '@/config/GameConfig';
 import gsap from 'gsap';
 import victoryPanelUrl from '@/assets/sprites/ui-panel-victory.png';
@@ -125,17 +126,7 @@ export class LevelComplete extends Container {
     else if (stars >= 2) headline = pick(HEADLINES_2);
     else headline = pick(HEADLINES_1);
 
-    const titleText = new Text({
-      text: headline,
-      style: new TextStyle({
-        fontSize: 33,
-        fill: passed ? 0xfff0a0 : 0xff6b6b,
-        fontWeight: 'bold',
-        fontFamily: 'Georgia, serif',
-        stroke: { color: passed ? 0x7c3000 : 0x3a0000, width: 6 },
-        dropShadow: { color: passed ? 0xffaa00 : 0xff0000, distance: 0, blur: 18, alpha: 0.85 },
-      }),
-    });
+    const titleText = new Text({ text: headline, style: passed ? tsVictoryHeadline : tsFailureHeadline });
     titleText.anchor.set(0.5);
     titleText.y = -238;
     titleText.scale.set(0);
@@ -172,26 +163,15 @@ export class LevelComplete extends Container {
       panel.addChild(row);
       goalRows.push(row);
 
-      const icon = new Text({
-        text: g.done ? '✓' : '–',
-        style: new TextStyle({
-          fontSize: 15,
-          fontWeight: 'bold',
-          fill: g.done ? 0x4ade80 : 0x777777,
-        }),
-      });
+      const iconStyle = tsGoalLabel.clone();
+      iconStyle.fill = g.done ? 0x4ade80 : 0x777777;
+      const icon = new Text({ text: g.done ? '✓' : '–', style: iconStyle });
       icon.anchor.set(0.5, 0.5);
       row.addChild(icon);
 
-      const lbl = new Text({
-        text: g.label,
-        style: new TextStyle({
-          fontSize: 13,
-          fill: g.done ? 0xffffff : 0x999999,
-          fontFamily: 'Segoe UI, sans-serif',
-          dropShadow: { color: 0x000000, distance: 1, blur: 3, alpha: 0.9 },
-        }),
-      });
+      const lblStyle = tsGoalLabel.clone();
+      lblStyle.fill = g.done ? 0xffffff : 0x999999;
+      const lbl = new Text({ text: g.label, style: lblStyle });
       lbl.anchor.set(0, 0.5);
       lbl.x = 14;
       row.addChild(lbl);
@@ -204,30 +184,13 @@ export class LevelComplete extends Container {
     // ── Score ─────────────────────────────────────────────────────
     const scoreBaseY = goalsTopY + Math.max(goals.length, 1) * 27 + 8;
 
-    const scoreLabel = new Text({
-      text: 'SCORE',
-      style: new TextStyle({
-        fontSize: 12,
-        fill: 0xaaaaaa,
-        fontFamily: 'Segoe UI, sans-serif',
-        letterSpacing: 4,
-      }),
-    });
+    const scoreLabel = new Text({ text: 'SCORE', style: tsScoreLabel });
     scoreLabel.anchor.set(0.5);
     scoreLabel.y = scoreBaseY;
     scoreLabel.alpha = 0;
     panel.addChild(scoreLabel);
 
-    const scoreValue = new Text({
-      text: '0',
-      style: new TextStyle({
-        fontSize: 40,
-        fontWeight: 'bold',
-        fontFamily: 'Georgia, serif',
-        fill: 0xffffff,
-        dropShadow: { color: 0xf5c842, distance: 0, blur: 14, alpha: 0.9 },
-      }),
-    });
+    const scoreValue = new Text({ text: '0', style: tsScoreDisplay });
     scoreValue.anchor.set(0.5);
     scoreValue.y = scoreBaseY + 32;
     scoreValue.alpha = 0;
@@ -246,16 +209,7 @@ export class LevelComplete extends Container {
       coinCircle.x = -50;
       coinsRow.addChild(coinCircle);
 
-      const coinText = new Text({
-        text: `+${coinsEarned} coins`,
-        style: new TextStyle({
-          fontSize: 19,
-          fill: 0xf5d060,
-          fontFamily: 'Segoe UI, sans-serif',
-          fontWeight: 'bold',
-          dropShadow: { color: 0x000000, distance: 1, blur: 4, alpha: 0.8 },
-        }),
-      });
+      const coinText = new Text({ text: `+${coinsEarned} coins`, style: tsCoinEarned });
       coinText.anchor.set(0, 0.5);
       coinText.x = -35;
       coinsRow.addChild(coinText);
@@ -280,17 +234,7 @@ export class LevelComplete extends Container {
     btnSheen.fill({ color: 0xffffff, alpha: 0.15 });
     btn.addChild(btnSheen);
 
-    const btnLabel = new Text({
-      text: passed ? 'CONTINUE  →' : 'TRY AGAIN',
-      style: new TextStyle({
-        fontSize: 21,
-        fill: 0xffffff,
-        fontWeight: 'bold',
-        fontFamily: 'Georgia, serif',
-        letterSpacing: 1,
-        dropShadow: { color: 0x000000, distance: 2, alpha: 0.7 },
-      }),
-    });
+    const btnLabel = new Text({ text: passed ? 'CONTINUE' : 'TRY AGAIN', style: tsResultButton });
     btnLabel.anchor.set(0.5);
     btn.addChild(btnLabel);
 

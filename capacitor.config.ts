@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Roxy's Magic Reels",
   webDir: 'dist',
   ios: {
-    contentInset: 'always',
+    contentInset: 'never',
     backgroundColor: '#0c0a08',
     preferredContentMode: 'mobile',
   },

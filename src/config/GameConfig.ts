@@ -55,6 +55,8 @@ export const GameConfig: Omit<typeof StaticConfig, 'cellSize' | 'rows' | 'cols'>
   cols: number;
   isPortrait: boolean;
   isTouch: boolean;
+  /** Full physical screen bounds in stage-local coordinates for cover-scaling backgrounds */
+  bgBounds: { x: number; y: number; w: number; h: number };
 } = {
   ...StaticConfig,
 
@@ -64,4 +66,5 @@ export const GameConfig: Omit<typeof StaticConfig, 'cellSize' | 'rows' | 'cols'>
   cellSize: StaticConfig.cellSizeLandscape as number,
   isPortrait: false,
   isTouch: typeof window !== 'undefined' && 'ontouchstart' in window,
+  bgBounds: { x: 0, y: 0, w: StaticConfig.width, h: StaticConfig.height },
 };

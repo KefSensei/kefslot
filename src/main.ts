@@ -129,6 +129,15 @@ async function boot() {
 
     app.stage.hitArea = new Rectangle(0, 0, activeW, activeH);
 
+    // Compute full-screen bounds in stage-local coords for cover-scale backgrounds.
+    // Backgrounds sized to these values will fill the entire physical screen with no bars.
+    GameConfig.bgBounds = {
+      x: -app.stage.x / scale,
+      y: -app.stage.y / scale,
+      w: windowW / scale,
+      h: windowH / scale,
+    };
+
     // Notify game of layout change
     game?.relayout(isPortrait);
   };
