@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "kie-art": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["tools/kie-mcp/server.mjs"]
-    }
-  }
-}

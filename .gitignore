@@ -13,6 +13,9 @@ src/assets/raw/
 # MCP server deps
 tools/kie-mcp/node_modules/
 
+# MCP config (machine-specific — create your own, see README)
+.mcp.json
+
 # Claude Code local overrides (personal API keys, machine-specific settings)
 .claude/settings.local.json
 
